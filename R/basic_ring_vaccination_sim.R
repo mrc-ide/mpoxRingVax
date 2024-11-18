@@ -169,7 +169,8 @@ basic_ring_vaccination_sim <- function(mn_offspring,                       # mea
 
     ## Adding the onset times and quarantine times to this infection's information in the dataframe
     tdf$time_onset_relative_parent[index_idx] <- index_onset_time
-    tdf$time_onset_absolute[index_idx] <- index_onset_time + index_time_infection
+    index_onset_time_absolute <- index_onset_time + index_time_infection
+    tdf$time_onset_absolute[index_idx] <- index_onset_time_absolute
     tdf$quarantined[index_idx] <- index_quarantine     ## NOTE: needs to change to make probability of quarantining conditional on having symptoms
     tdf$time_quarantined_relative_time_onset[index_idx] <- index_quarantine_time
     tdf$time_quarantined_relative_time_infection[index_idx] <- index_onset_time + index_quarantine_time
@@ -230,7 +231,7 @@ basic_ring_vaccination_sim <- function(mn_offspring,                       # mea
         ###################################################################################################################################################################################
         # If the vaccine hasn't yet been deployed or infection is asymptomatic, no secondary infections are prevented by ring vaccination - add secondary infections to the dataframe
         ###################################################################################################################################################################################
-        if ((index_time_infection < vaccine_start) | index_asymptomatic == 1) {
+        if ((index_onset_time_absolute < vaccine_start) | index_asymptomatic == 1) {
 
           tdf[(current_max_row+1):(current_max_row+index_n_offspring), "id"] <- c(current_max_id + seq_len(index_n_offspring))
           tdf[(current_max_row+1):(current_max_row+index_n_offspring), "parent"] <- index_id
@@ -297,7 +298,6 @@ basic_ring_vaccination_sim <- function(mn_offspring,                       # mea
           retained_index <- which(secondary_infection_retained == 1)                                                                             # which secondary infections were NOT averted by ring-vaccination and thus are retained for inclusion in the dataframe
           secondary_pruned_infection_times <- secondary_infection_times[retained_index]                                                          # infection times of retained infections
           secondary_vaccinated <- ifelse(secondary_vaccinated_successfully[retained_index] == 0, 0, 1)                                           # of the retained infections, which are vaccinated
-          # print(paste0("Secondary vaccinated: ", secondary_vaccinated))
           secondary_time_vaccinated <- ifelse(secondary_vaccinated_successfully[retained_index] == 1, time_to_contact_vaccination, NA)           # of the retained infections, when are they vaccinated (relative to infection time of index)
           secondary_vaccinated_before_infection <- ifelse(secondary_vaccinated_successfully[retained_index] == 0, NA, 1)                         # (currently we combine all individuals not vaccinated and vaccinated after infection into "unvaccinated", so all vaccinated individuals necessarily got vaccinated before infection)
           secondary_time_protected <- ifelse(secondary_vaccinated_successfully[retained_index] == 1, time_to_contact_vaccination_protection, NA) # of the retained infections, when are they protected (relative to infection time of index)
@@ -374,7 +374,7 @@ basic_ring_vaccination_sim <- function(mn_offspring,                       # mea
         ##############################################################################
         # Only do this is if the vaccine is available and the index is symptomatic
         ##############################################################################
-        if ((index_time_infection > vaccine_start) & index_asymptomatic == 0) {
+        if ((index_onset_time_absolute > vaccine_start) & index_asymptomatic == 0) {
 
           ## Creating vectors to store whether or not infections are vaccinated, protected and/or prevented
           secondary_vaccinated_successfully_2nd_chance <- vector(mode = "integer", length = index_pruned_n_offspring_pre_second_chance)  ## vector of whether secondary infections get vaccinated in time on the 2nd attempt at ring vaccination
@@ -506,7 +506,8 @@ basic_ring_vaccination_sim <- function(mn_offspring,                       # mea
 
         ## Adding the onset times to this secondary infection's information in the dataframe
         tdf$time_onset_relative_parent[secondary_idx] <- secondary_onset_time
-        tdf$time_onset_absolute[secondary_idx] <- secondary_onset_time + secondary_time_infection
+        secondary_onset_time_absolute <- secondary_onset_time + secondary_time_infection
+        tdf$time_onset_absolute[secondary_idx] <- secondary_onset_time_absolute
         tdf$quarantined[secondary_idx] <- secondary_quarantine     ## NOTE: needs to change to make probability of quarantining conditional on having symptoms
         tdf$time_quarantined_relative_time_onset[secondary_idx] <- secondary_time_quarantine
         tdf$time_quarantined_relative_time_infection[secondary_idx] <- secondary_onset_time + secondary_time_quarantine
@@ -551,7 +552,7 @@ basic_ring_vaccination_sim <- function(mn_offspring,                       # mea
           ###################################################################################################################################################################################
           # If the vaccine hasn't yet been deployed or infection is asymptomatic, no tertiary infections are prevented by ring vaccination - add tertiary infections to the dataframe
           ###################################################################################################################################################################################
-          if ((index_time_infection < vaccine_start) | index_asymptomatic == 1) {
+          if ((index_onset_time_absolute < vaccine_start) | index_asymptomatic == 1) {
 
             tdf$n_offspring_post_pruning[secondary_idx] <- secondary_n_offspring
 
