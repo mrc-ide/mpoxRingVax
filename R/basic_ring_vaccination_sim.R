@@ -32,7 +32,6 @@
 #########################################################################################################################################################################################################
 ## To Definitely Build In:
 ##
-## - Make vaccine start dependent on index/secondary onset time (not index/secondary infection time)
 ## - Add prob contact traced successfully for vaccination purposes (can add into the vaccination section)
 ## - Prob quarantine conditional on symptoms, rather than being independent of it
 ##
