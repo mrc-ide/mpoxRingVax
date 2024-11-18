@@ -29,13 +29,6 @@
 ##
 #########################################################################################################################################################################################################
 
-#########################################################################################################################################################################################################
-## To Definitely Build In:
-##
-## - Prob quarantine conditional on symptoms, rather than being independent of it
-##
-#########################################################################################################################################################################################################
-
 #' @export
 basic_ring_vaccination_sim <- function(mn_offspring,                       # mean of the offspring distribution
                                        disp_offspring,                     # overdispersion of the offspring distribution
@@ -161,7 +154,6 @@ basic_ring_vaccination_sim <- function(mn_offspring,                       # mea
     index_onset_time <- infection_to_onset(n = 1)                                                                    # generate the time from infection to symptom onset for the index case
     index_asymptomatic <- tdf$asymptomatic[index_idx]                                                                # whether or not the index case (the "parent") is asymptomatic (influences whether contacts get ring vaccinated or not)
     index_secondary_offspring_generated <- tdf$secondary_offspring_generated[index_idx]                              # whether or not secondary offspring have already been generated for this infection
-    ## NOTE: needs to change to make probability of quarantining conditional on having symptoms
     index_quarantine <- rbinom(n = 1, size = 1, prob = prob_quarantine)                                              # whether or not the index case isolates
     index_quarantine_time <- ifelse(index_quarantine == 1, onset_to_quarantine(n = 1), NA)                           # if the infection isolates, how soon after symptom onset they do so
 
@@ -169,7 +161,7 @@ basic_ring_vaccination_sim <- function(mn_offspring,                       # mea
     tdf$time_onset_relative_parent[index_idx] <- index_onset_time
     index_onset_time_absolute <- index_onset_time + index_time_infection
     tdf$time_onset_absolute[index_idx] <- index_onset_time_absolute
-    tdf$quarantined[index_idx] <- index_quarantine     ## NOTE: needs to change to make probability of quarantining conditional on having symptoms
+    tdf$quarantined[index_idx] <- index_quarantine
     tdf$time_quarantined_relative_time_onset[index_idx] <- index_quarantine_time
     tdf$time_quarantined_relative_time_infection[index_idx] <- index_onset_time + index_quarantine_time
     tdf$time_quarantined_absolute[index_idx] <- index_time_infection + index_onset_time + index_quarantine_time
@@ -210,7 +202,7 @@ basic_ring_vaccination_sim <- function(mn_offspring,                       # mea
       ## Removing any infections that are averted due to quarantining (assumed to occur index_quarantine_time after symptom onset, which is index_onset_time)
       ###########################################################################################################################################################
       ## If index infection quarantines, reduce secondary infections - note that quarantine only occurs if infection has symptoms
-      if (index_quarantine == 1 & index_asymptomatic == 0) { ## NOTE: needs to change to make probability of quarantining conditional on having symptoms
+      if (index_quarantine == 1 & index_asymptomatic == 0) {
         index_quarantine_possible_avert <- ifelse((index_onset_time + index_quarantine_time) < secondary_infection_times, 1, 0)           # if an infection occurs later than quarantining, it can be averted by quarantine
         index_quarantine_averted <- rbinom(n = index_n_offspring, size = 1, prob = index_quarantine_possible_avert * quarantine_efficacy) # is the infection actually averted by the quarantining (which can be imperfect)
         index_n_offspring <- index_n_offspring - sum(index_quarantine_averted)                                                            # removing infections averted by quarantine from index_n_offspring
@@ -500,13 +492,12 @@ basic_ring_vaccination_sim <- function(mn_offspring,                       # mea
         secondary_time_infection_relative <- tdf$time_infection_relative[secondary_idx]                                             # time of infection relative to the parent (the index infection)
         secondary_quarantine <- rbinom(n = 1, size = 1, prob = prob_quarantine)                                                     # whether or not this secondary infection quarantines
         secondary_time_quarantine <- ifelse(secondary_quarantine == 1, onset_to_quarantine(n = 1), NA)                              # if they quarantine, when do they quarantine (how long after symptom onset)
-        ## NOTE: needs to change to make probability of quarantining conditional on having symptoms
 
         ## Adding the onset times to this secondary infection's information in the dataframe
         tdf$time_onset_relative_parent[secondary_idx] <- secondary_onset_time
         secondary_onset_time_absolute <- secondary_onset_time + secondary_time_infection
         tdf$time_onset_absolute[secondary_idx] <- secondary_onset_time_absolute
-        tdf$quarantined[secondary_idx] <- secondary_quarantine     ## NOTE: needs to change to make probability of quarantining conditional on having symptoms
+        tdf$quarantined[secondary_idx] <- secondary_quarantine
         tdf$time_quarantined_relative_time_onset[secondary_idx] <- secondary_time_quarantine
         tdf$time_quarantined_relative_time_infection[secondary_idx] <- secondary_onset_time + secondary_time_quarantine
         tdf$time_quarantined_absolute[secondary_idx] <- secondary_time_infection + secondary_onset_time + secondary_time_quarantine
@@ -531,7 +522,7 @@ basic_ring_vaccination_sim <- function(mn_offspring,                       # mea
         ################################################################################################################################################################
         ## Removing any infections that are averted due to quarantining (assumed to occur secondary_time_quarantine after symptom onset, which is secondary_onset_time)
         ################################################################################################################################################################
-        if (secondary_quarantine == 1 & secondary_asymptomatic == 0) {     ## NOTE: needs to change to make probability of quarantining conditional on having symptoms
+        if (secondary_quarantine == 1 & secondary_asymptomatic == 0) {
           secondary_quarantine_possible_avert <- ifelse((secondary_onset_time + secondary_time_quarantine) < tertiary_infection_times, 1, 0)            # if infection occurs later than quarantining, it can be averted by quarantine
           secondary_quarantine_averted <- rbinom(n = secondary_n_offspring, size = 1, prob = secondary_quarantine_possible_avert * quarantine_efficacy) # is the infection actually averted by the quarantining (which can be imperfect)
           secondary_n_offspring <- secondary_n_offspring - sum(secondary_quarantine_averted)                                                            # removing infections averted by quarantine from index_n_offspring
