@@ -114,4 +114,6 @@ south_kivu$hh_id <- 1:nrow(south_kivu)
 south_kivu_final <- south_kivu %>%
   select(hh_id, hh_size_from_ages, hh_ages_grouped, hh_occupations) %>%
   rename(hh_size = hh_size_from_ages)
+
+south_kivu_final <- data.table::as.data.table(south_kivu_final)
 usethis::use_data_raw("south_kivu_final")

@@ -34,6 +34,7 @@ ggplot(y, aes(x = hv009, fill = province)) +
   facet_wrap(. ~ province, scales = "free_y")
 
 # Selecting South Kivu specifically and then populating with SW/PBS/genPop estimates
+set.seed(1401)
 south_kivu <- y %>%
   filter(province == "sud-kivu")
 south_kivu <- rbind(south_kivu, south_kivu, south_kivu, south_kivu, south_kivu,
@@ -114,5 +115,22 @@ south_kivu$hh_id <- 1:nrow(south_kivu)
 south_kivu_final <- south_kivu %>%
   select(hh_id, hh_size_from_ages, hh_ages_grouped, hh_occupations) %>%
   rename(hh_size = hh_size_from_ages)
+
+## Creating indicator columns for use later on
+for (i in 1:nrow(south_kivu_final)) {
+
+  temp_occ <- unlist(south_kivu_final$hh_occupations[i])
+  south_kivu_final$contains_genPop[i] <-ifelse("genPop" %in% temp_occ, 1, 0)
+  south_kivu_final$contains_PBS[i] <-ifelse("PBS" %in% temp_occ, 1, 0)
+  south_kivu_final$contains_SW[i] <-ifelse("SW" %in% temp_occ, 1, 0)
+
+  temp_age <- unlist(south_kivu_final$hh_ages[i])
+  south_kivu_final$contains_0_5[i] <-ifelse("0-5" %in% temp_age, 1, 0)
+  south_kivu_final$contains_5_18[i] <-ifelse("5-18" %in% temp_age, 1, 0)
+  south_kivu_final$contains_18plus[i] <-ifelse("18+" %in% temp_age, 1, 0)
+
+}
+
+south_kivu_final <- data.table::as.data.table(south_kivu_final)
 
 usethis::use_data(south_kivu_final, overwrite = TRUE)
