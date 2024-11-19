@@ -26,7 +26,7 @@ offspring_fun <- function(synthetic_household_df,                    # dataframe
                           disp_offspring_community,                  # overdispersion of the community offspring distribution
                           number_susceptible_community,              # number of susceptible individuals remaining in the community
                           population_community,                      # overall population size
-                          community_transmission_age_matrix,         # rows are the proportions of cases in each age-group a particular age-group gives rises to (note this needs to take into account smallpox vaccination)
+                          community_transmission_age_matrix          # rows are the proportions of cases in each age-group a particular age-group gives rises to (note this needs to take into account smallpox vaccination)
 ) {
 
   # Helper vectors that will assist with subsetting later on
@@ -156,6 +156,7 @@ offspring_fun <- function(synthetic_household_df,                    # dataframe
 
   ## If no household offspring generated, initialise an empty household offspring df
   } else {
+    cumulative_hh_infected_index <- index_hh_infections_index
     offspring_characteristics_df_hh <- data.frame(transmission_route = character(0),
                                                   occupation = character(0),
                                                   age = character(0),

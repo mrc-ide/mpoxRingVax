@@ -36,6 +36,29 @@ load("data/south_kivu_final.rda")
 synthetic_household_df <- data.table::as.data.table(south_kivu_final)
 seeding_cases <- 5
 t0 <- 0
+infection_to_onset <- function(n) { rep(5, n) }
+prob_quarantine <- 0.4
+onset_to_quarantine <- function(n) { rep(2, n) }
+vaccine_logistical_delay <- 2
+vaccine_protection_delay <- 2
+mn_offspring_sexual_SW <- 5
+disp_offspring_sexual_SW <- 100
+mn_offspring_sexual_PBS <- 5
+disp_offspring_sexual_PBS <- 10
+mn_offspring_sexual_genPop <- 5
+disp_offspring_sexual_genPop <- 10
+sexual_transmission_occupation_matrix <- matrix(data = c(0.00, 0.10, 0.90,
+                                                         0.20, 0.10, 0.70,
+                                                         0.00, 0.90, 0.10), nrow = 3, ncol = 3, byrow = TRUE)
+mn_offspring_hh <- 7
+disp_offspring_hh <- 100
+mn_offspring_community <- 5
+disp_offspring_community <- 100
+community_transmission_age_matrix <- matrix(data = c(0.34, 0.33, 0.33,
+                                                     0.34, 0.33, 0.33,
+                                                     0.34, 0.33, 0.33), nrow = 3, ncol = 3, byrow = TRUE)
+vaccine_efficacy_transmission <- 0.5
+generation_time <- function(n) { rep(10, n)}
 
 #' @export
 basic_ring_vaccination_sim <- function(## Sexual Transmission Parameters
@@ -139,6 +162,7 @@ basic_ring_vaccination_sim <- function(## Sexual Transmission Parameters
   # Sampling the households for the initial seeding cases - we seed this epidemic in sex workers
   sampled_rows <- synthetic_household_df[get("contains_SW") == 1][sample(.N, seeding_cases)]  # sampling from synthetic hh df a hh that contains a SW
   seeding_case_occupations <- rep("SW", seeding_cases)
+  seeding_case_ages <- rep("18+", seeding_cases)
   seeding_case_indices <- unlist(lapply(sampled_rows$hh_occupations, function(occupations) {
     which(occupations == "SW")  # Find the indices where "SW" occurs
   }))
@@ -179,7 +203,7 @@ basic_ring_vaccination_sim <- function(## Sexual Transmission Parameters
     ## new stuff added here
     transmission_route = NA_character_,
     occupation = seeding_case_occupations,
-    age = NA_character_,
+    age = seeding_case_ages,
     hh_id = 1:seeding_cases,
     hh_member_index = seeding_case_indices,
     hh_size = sampled_rows$hh_size,
@@ -196,11 +220,10 @@ basic_ring_vaccination_sim <- function(## Sexual Transmission Parameters
     ## Get the total number of infections in the dataframe currently (so we can figure out how to label the new infections)
     current_max_row <- max(which(!is.na(tdf$time_infection_absolute)))
     current_max_id <- tdf$id[current_max_row]
+    current_max_hh_id <- max(tdf$hh_id)
 
     ## Getting the timings of the earliest/oldest infection we haven't yet generated tertiary infections for
-    ### NOTE: IF WE WANT TO TOGGLE 1 VS 2 RINGS, WE'LL HAVE TO CHANGE THIS SECTION TO HAVE A DIFFERENT APPROACH AS tertiary_offspring_generated WILL ALWAYS
-    ### BE 0 WHEN WE ONLY HAVE 1 RING (AS WE'LL ONLY GENERATE SECONDARY INFECTIONS EACH TIME).
-    index_time_infection <- min(tdf$time_infection_absolute[tdf$tertiary_offspring_generated == 0 &  ## NOTE: DO WE WANT SECONDARY OFFSPRING GENERATED IN HERE AS A CONDITION AS WELL? I THINK WE DON'T NEED TO.
+    index_time_infection <- min(tdf$time_infection_absolute[tdf$tertiary_offspring_generated == 0 &
                                                               !is.na(tdf$time_infection_absolute)])                  # timing of the earliest unsimulated infection
     index_idx <- which(tdf$time_infection_absolute == index_time_infection & !tdf$tertiary_offspring_generated)[1]   # get the row of the earliest unsimulated infection
     index_id <- tdf$id[index_idx]                                                                                    # id of the earliest unsimulated infection
@@ -214,6 +237,17 @@ basic_ring_vaccination_sim <- function(## Sexual Transmission Parameters
     index_secondary_offspring_generated <- tdf$secondary_offspring_generated[index_idx]                              # whether or not secondary offspring have already been generated for this infection
     index_quarantine <- rbinom(n = 1, size = 1, prob = prob_quarantine)                                              # whether or not the index case isolates
     index_quarantine_time <- ifelse(index_quarantine == 1, onset_to_quarantine(n = 1), NA)                           # if the infection isolates, how soon after symptom onset they do so
+
+    ## new stuff added here
+    index_occupation <- tdf$occupation[index_idx]                                                                    # occupation of the index infection (SW, PBS or genPop)
+    index_age_group <- tdf$age[index_idx]                                                                            # age-group of the index infection (0-5, 5-18 or 18+)
+    index_hh_id <- tdf$hh_id[index_idx]                                                                              # household ID of the index infection
+    index_hh_member_index <- tdf$hh_member_index[index_idx]                                                          # house member ID for each household (used to subset the ages and occupations vectors for each household)
+    index_hh_size <- unlist(tdf$hh_size[index_idx])                                                                  # household size
+    index_hh_ages <- unlist(tdf$hh_ages[index_idx])                                                                  # ages of all of the household members
+    index_hh_occupations <- tdf$hh_occupations[index_idx]                                                            # occupations of all the household members
+    index_hh_infections <- tdf$hh_infections[index_idx]                                                              # cumulative number of infections there have been in this particular household (Note: need to make sure this is updated for the index case when we've simulated from them)
+    index_hh_infected_index <- unlist(tdf$hh_infected_index[index_idx])                                              # house member IDs of all infected household members
 
     ## Adding the onset times and quarantine times to this infection's information in the dataframe
     tdf$time_onset_relative_parent[index_idx] <- index_onset_time
@@ -243,18 +277,60 @@ basic_ring_vaccination_sim <- function(## Sexual Transmission Parameters
       ##########################################################################################################
       # Generating secondary infections and infection times, taking vaccination status of index into account
       ##########################################################################################################
-      index_n_offspring <- offspring_fun(1, susc)      # raw number of secondary infections
+      index_offspring_function_draw <- offspring_fun(synthetic_household_df = synthetic_household_df,
+                                                     index_age_group = index_age_group,
+                                                     index_hh_id = index_hh_id,
+                                                     index_occupation = index_occupation,
+                                                     max_hh_id = current_max_hh_id,
+
+                                                     mn_offspring_sexual_SW = mn_offspring_sexual_SW,
+                                                     disp_offspring_sexual_SW = disp_offspring_sexual_SW,
+                                                     mn_offspring_sexual_PBS = mn_offspring_sexual_PBS,
+                                                     disp_offspring_sexual_PBS = disp_offspring_sexual_PBS,
+                                                     mn_offspring_sexual_genPop = mn_offspring_sexual_genPop,
+                                                     disp_offspring_sexual_genPop = disp_offspring_sexual_genPop,
+                                                     sexual_transmission_occupation_matrix = sexual_transmission_occupation_matrix,
+
+                                                     mn_offspring_hh = mn_offspring_hh,
+                                                     disp_offspring_hh = disp_offspring_hh,
+                                                     index_hh_member_index = index_hh_member_index,
+                                                     index_hh_infections_index = index_hh_infected_index,
+                                                     index_hh_size = index_hh_size,
+                                                     index_hh_prior_infections = index_hh_infections,
+                                                     index_hh_ages = index_hh_ages,
+                                                     index_hh_occupations = index_occupation,
+
+                                                     mn_offspring_community = mn_offspring_community,
+                                                     disp_offspring_community = disp_offspring_community,
+                                                     number_susceptible_community = susc,
+                                                     population_community = population,
+                                                     community_transmission_age_matrix = community_transmission_age_matrix)
+
+      index_n_offspring <- index_offspring_function_draw$total_offspring
       tdf$n_offspring[index_idx] <- index_n_offspring
       tdf$secondary_offspring_generated[index_idx] <- TRUE
 
       ## If index infection was vaccinated, account for vaccination's effect on transmission in breakthrough infections
       if (index_vaccinated == 1) {
         if (index_time_protected < index_time_infection) {
-          index_n_offspring <- sum(rbinom(n = index_n_offspring, size = 1, prob = 1 - vaccine_efficacy_transmission))
+          index_offspring_retained_index <- which(rbinom(n = index_n_offspring, size = 1, prob = 1 - vaccine_efficacy_transmission) == 1)
+          index_offspring_function_draw$offspring_characteristics <- index_offspring_function_draw$offspring_characteristics[index_offspring_retained_index, ]
+          index_offspring_function_draw$total_offspring <- length(index_offspring_retained_index)
+          index_offspring_function_draw$num_offspring_sexual <- sum(index_offspring_function_draw$offspring_characteristics$transmission_route == "sexual")
+          index_offspring_function_draw$num_offspring_hh <- sum(index_offspring_function_draw$offspring_characteristics$transmission_route == "household")
+          index_offspring_function_draw$num_offspring_community <- sum(index_offspring_function_draw$offspring_characteristics$transmission_route == "community")
+          index_n_offspring <- length(index_offspring_retained_index)
         }
       }
-      tdf$n_offspring_new[index_idx] <- index_n_offspring # number of secondary infections after accounting for vaccination's effect on transmission in breakthrough infections
+      tdf$n_offspring_new[index_idx] <- index_n_offspring
       secondary_infection_times <- generation_time(index_n_offspring)
+
+      #### NOTE FOR TOMORROW THAT LATER ON, WE MIGHT TO HAVE TO DO SOM DYNAMIC UPDATING OF THE HOUSEHOLD IDs BECAUSE
+      #### THEY'RE CURRENTLY ORDERED (AS ABOVE) AND THEN WE REMOVE SOME.
+      #### I'M STRUGGLING TO WORK OUT WHETHER THE MAX IS PRESERVED AS WE REMOVE (IN WHICH CASE DON'T HAVE TO DYNAMICALLY UPDATE
+      #### UNLESS WE WANT THEM TO BE ALL THE NUMBERS ONE AFTER ANOTHER I.E. WHETHER WE CARE ABOUT GAPS) - IF THE MAX IS PRESERVED,
+      #### I THINK WE'RE FINE AND WE JUST HAVE TO ENSURE WE'RE STARTING OUR HH ID NUMBERING FROM THERE EACH TIME.
+      ##### GOT TO HERE LAST NIGHT - START FROM HERE TOMORROW MORNING :) #####
 
       ###########################################################################################################################################################
       ## Removing any infections that are averted due to quarantining (assumed to occur index_quarantine_time after symptom onset, which is index_onset_time)
