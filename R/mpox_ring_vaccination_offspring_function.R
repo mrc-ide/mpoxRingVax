@@ -51,10 +51,12 @@ offspring_fun <- function(index_age_group,                           # age of th
 
                           mn_offspring_hh,                           # mean of the household offspring distribution
                           disp_offspring_hh,                         # overdispersion of the household offspring distribution
-                          index_hh_size,                             # size of index infection's household (excluding the index infection)
-                          index_hh_prior_infections,                 # number of prior infections in the index's household (excluding the index infection)
-                          index_hh_ages,                             # ages of index infection's household (excluding the index infection and others already infected)
-                          index_hh_occupations,                      # occupations of the index infection's household (excluding the index infection and others already infected)
+                          index_hh_member_index,                     # index for the index infection in this household
+                          index_hh_infections_index,                 # index for all the infections (including the index infection) in this household
+                          index_hh_size,                             # size of index infection's household (including the index infection)
+                          index_hh_prior_infections,                 # number of prior infections in the index's household (including the index infection)
+                          index_hh_ages,                             # ages of index infection's household (including the index infection)
+                          index_hh_occupations,                      # occupations of the index infection's household (including the index infection)
 
                           mn_offspring_community,                    # mean of the community offspring distribution
                           disp_offspring_community,                  # overdispersion of the community offspring distribution
@@ -67,6 +69,10 @@ offspring_fun <- function(index_age_group,                           # age of th
 
   ## add in "household member number" to track index of occupations and age that the person is in the vector in the list
   ## change it so that it doesn't exclude the index infection
+
+  age_group_to_column <- c("0-5" = "contains_0_5", "5-18" = "contains_5_18", "18+" = "contains_18plus")
+  occupation_to_column <- c("genPop" = "contains_genPop", "PBS" = "contains_PBS", "SW" = "contains_SW")
+
 
   #########################################################################################################################
   ## Generating infections from sexual transmission and their characteristics
@@ -111,47 +117,70 @@ offspring_fun <- function(index_age_group,                           # age of th
   }
 
   ##########################################################################################################################################
-  ## Generating infections from household transmission and their characteristics
-  ## - Note that we aassume:
+  ## HOUSEHOLD INFECTIONS: Generating infections from household transmission and their characteristics
+  ## - Note that we assume:
   ##     1) Frequency-dependent transmission e.g. https://elifesciences.org/articles/70767 but might want to change this
   ##########################################################################################################################################
-  number_susceptible_hh <- index_hh_size - index_hh_prior_infections ## NOTE THAT INDEX_HH_SIZE MUST EXCLUDE THE INDEX CASE
-  new_mn_hh <- mn_offspring_hh * number_susceptible_hh/index_hh_size
-  new_disp_hh <- new_mn_hh/(disp_offspring_hh - 1)
-  num_offspring_hh <- min(c(rnbinom(n = 1, mu = new_mn_hh, size = new_disp_hh), number_susceptible_hh))
+  if (index_hh_prior_infections != length(index_hh_infections_index)) {
+    stop("something has gone wrong with keeping track of prior infections")
+  }
+  number_susceptible_hh <- index_hh_size - length(index_hh_infections_index)   # number of susceptibles remaining in the household
+  new_mn_hh <- mn_offspring_hh * number_susceptible_hh/index_hh_size           # mean of household offspring distribution taking susceptible depletion into account
+  new_disp_hh <- new_mn_hh/(disp_offspring_hh - 1)                             # overdispersion of the household offspring distribution taking susceptible depletion into account
+  num_offspring_hh <- min(c(rnbinom(n = 1, mu = new_mn_hh, size = new_disp_hh), number_susceptible_hh)) # number of household offspring, capped at number of individuals who can still be infected in the household
+
+  ## If household offspring are generated, create them and imbue them with all the required characteristics
   if (num_offspring_hh > 0) {
-    infected_hh_index <- sample(x = 1:number_susceptible_hh, size = num_offspring_hh, replace = FALSE)
-    offspring_hh_ages <- index_hh_ages[infected_hh_index]
-    offspring_hh_occupation <- index_hh_occupations[infected_hh_index]
-    offspring_hh_id <- rep(index_hh_id, num_offspring_hh)
-    offspring_characteristics_df_hh <- data.frame(transmission_route = "household",
-                                                  occupation = offspring_hh_occupation,
-                                                  age = offspring_hh_ages,
-                                                  hh_id = offspring_hh_id)
+
+    ## Sampling which individuals in the household get infected
+    offspring_hh_infections_index <- sample(seq.int(1, index_hh_size)[-index_hh_infections_index], num_offspring_hh, replace = FALSE)
+    offspring_characteristics_df_hh <- data.table::data.table(transmission_route = "household",                                                 # transmission route
+                                                              occupation = index_hh_occupations[offspring_hh_infections_index],                 # occupation of new hh infections
+                                                              age = index_hh_ages[offspring_hh_infections_index],                               # age of new hh infections
+                                                              hh_id = index_hh_id,                                                              # hh id of new infections
+                                                              hh_member_index = offspring_hh_infections_index,                                  # index of each hh member (i.e. which element in index_hh_ages etc they are)
+                                                              hh_size = index_hh_size,                                                          # size of the household
+                                                              hh_ages = index_hh_ages,                                                          # ages of individuals in the household
+                                                              hh_occupations = index_hh_occupations,                                            # occupations of individuals in the household
+                                                              hh_infections = index_hh_prior_infections + num_offspring_hh,                     # total number of infected individuals in the household
+                                                              hh_infected_index = c(index_hh_infections_index, offspring_hh_infections_index))  # indices of all the infected individuals in the household
+
+  ## If no household offspring generated, initialise an empty household offspring df
   } else {
     offspring_characteristics_df_hh <- data.frame(transmission_route = character(0),
                                                   occupation = character(0),
                                                   age = character(0),
-                                                  hh_id = numeric(0))
+                                                  hh_id = numeric(0),
+                                                  hh_member_index = numeric(0),
+                                                  hh_size = numeric(0),
+                                                  hh_ages = numeric(0),
+                                                  hh_occupations = numeric(0),
+                                                  hh_infections = numeric(0),
+                                                  hh_infected_index = numeric(0))
   }
+
+  ##########################################################################################################################################
 
   ##########################################################################################################################################
   ## COMMUNITY INFECTIONS: Generating infections from community transmission and their characteristics
   ## - Note that we assume:
   ##     1) Single mpox introduction per household (thus all infections are in newly instantiated and separate households)
   ##########################################################################################################################################
-  new_mn_community <- mn_offspring_community * number_susceptible_community/population_community        # mean of community offspring distribution taking susceptible depletion into account
-  new_disp_community <- new_mn_community/(disp_offspring_community - 1)
-  num_offspring_community <- rnbinom(n = 1, mu = new_mn_community, size = new_disp_community)
-  age_group_to_column <- c("0-5" = "contains_0_5", "5-18" = "contains_5_18", "18+" = "contains_18plus")
+  new_mn_community <- mn_offspring_community * number_susceptible_community/population_community # mean of community offspring distribution taking susceptible depletion into account
+  new_disp_community <- new_mn_community/(disp_offspring_community - 1)                          # overdispersion of the community offspring distribution taking susceptible depletion into account
+  num_offspring_community <- rnbinom(n = 1, mu = new_mn_community, size = new_disp_community)    # number of community offspring generated by index case
 
-  ## Populating the df if there are community offspring
+  ## If community offspring are generated, create them and imbue them with all the required characteristics
   if (num_offspring_community > 0) {
 
-    offspring_list <- vector("list", num_offspring_community)
-    offspring_community_ages <- sample(c("0-5", "5-18", "18+"), size = num_offspring_community, prob = community_transmission_age_matrix[index_age_group, ], replace = TRUE)
-    offspring_community_new_hh_id <- max(offspring_sexual_new_hh_id) + 1:num_offspring_community
+    offspring_list <- vector("list", num_offspring_community)    # list to temporarily store outputs
+    offspring_community_ages <- sample(c("0-5", "5-18", "18+"),  # sample ages of community offspring
+                                       size = num_offspring_community,
+                                       prob = community_transmission_age_matrix[index_age_group, ],
+                                       replace = TRUE)
+    offspring_community_new_hh_id <- max(offspring_sexual_new_hh_id) + 1:num_offspring_community # enumerate the household id of each of the community offspring (each into a new household)
 
+    ## Looping through community offspring and sampling details of their occupation and household that they belong to, and their occupation
     for (i in 1:num_offspring_community) {
       offspring_community_age_group <- offspring_community_ages[i]
       col_name <- age_group_to_column[offspring_community_age_group]
@@ -189,7 +218,7 @@ offspring_fun <- function(index_age_group,                           # age of th
 
   return(list(total_offspring = num_offspring_sexual + num_offspring_hh + num_offspring_community,
               num_offspring_sexual = num_offspring_sexual,
-              num_offspring_hh = num_offspring_hh,
+              num_offspring_hh = num_offspring_hh,  ## make sure to use this to update the number of infections left in the household for the index infection!!!!
               num_offspring_community = num_offspring_community,
               offspring_characteristics = rbind(offspring_characteristics_df_sexual, offspring_characteristics_df_hh, offspring_characteristics_df_community)))
 }
