@@ -28,40 +28,67 @@
 ## - Ability to specify whether vaccine coverage is due to being missed by health system (in which case 2nd attempt might work) or due to hesitancy/refusal (in which case 2nd attemtp won't work)
 ##
 #########################################################################################################################################################################################################
+seed <- 118
+population <- 10^6
+initial_immune <- 0
+check_final_size <- 10000
+load("data/south_kivu_final.rda")
+synthetic_household_df <- data.table::as.data.table(south_kivu_final)
+seeding_cases <- 5
+t0 <- 0
 
 #' @export
-basic_ring_vaccination_sim <- function(mn_offspring,                       # mean of the offspring distribution
-                                       disp_offspring,                     # overdispersion of the offspring distribution
-                                       generation_time,                    # generation time distribution
-                                       t0 = 0,                             # simulation starting time
-                                       population,                         # total population size
-                                       check_final_size,                   # maximum number of infections to simulate
-                                       initial_immune = 0,                 # initial number of individuals who are immune
-                                       seeding_cases,                      # number of seeding cases to start the epidemic with
-                                       prop_asymptomatic,                  # probability an infection is asymptomatic
-                                       infection_to_onset,                 # infection to symptom onset time distribution
-                                       vaccine_start,                      # time at which the vaccine becomes available
-                                       vaccine_coverage,                   # probability that each eligible individual gets vaccinated
-                                       vaccine_efficacy_infection,         # vaccine efficacy against infection
-                                       vaccine_efficacy_transmission,      # reduction in transmissibility of breakthrough infections in vaccinated individuals
-                                       vaccine_logistical_delay,           # delay between symptom onset and vaccination of contacts (and contacts of contacts) occurring
-                                       vaccine_protection_delay,           # delay between vaccination and protection developing
-                                       prob_quarantine,                    # probability that an individual isolates
-                                       onset_to_quarantine,                # symptom onset to quarantine time distribution
-                                       quarantine_efficacy,                # effectiveness of the quarantine at reducing onwards transmission
-                                       seed                                # stochastic seed
+basic_ring_vaccination_sim <- function(## Sexual Transmission Parameters
+                                       mn_offspring_sexual_SW,                 # mean of the sexual offspring distribution for SW
+                                       disp_offspring_sexual_SW,               # overdispersion of the sexual offspring distribution for SW
+                                       mn_offspring_sexual_PBS,                # mean of the sexual offspring distribution for PBS
+                                       disp_offspring_sexual_PBS,              # mean of the sexual offspring distribution for PBS
+                                       mn_offspring_sexual_genPop,             # mean of the sexual offspring distribution for genPop
+                                       disp_offspring_sexual_genPop,           # mean of the sexual offspring distribution for genPop
+                                       sexual_transmission_occupation_matrix,  # rows are the proportions of cases in each occupation a particular occupation gives rises to
+
+                                       ## Household Transmission Parameters
+                                       mn_offspring_hh,                        # mean of the household offspring distribution
+                                       disp_offspring_hh,                      # overdispersion of the household offspring distribution
+
+                                       ## Community Transmission Parameters
+                                       mn_offspring_community,                 # mean of the community offspring distribution
+                                       disp_offspring_community,               # overdispersion of the community offspring distribution
+                                       community_transmission_age_matrix,      # rows are the proportions of cases in each age-group a particular age-group gives rises to (note this needs to take into account smallpox vaccination)
+
+                                       ## Natural History Parameters
+                                       prop_asymptomatic,                      # probability an infection is asymptomatic
+                                       generation_time,                        # generation time distribution
+                                       infection_to_onset,                     # infection to symptom onset time distribution
+
+                                       ## Vaccine-Related Parameters
+                                       vaccine_start,                          # time at which the vaccine becomes available
+                                       vaccine_coverage,                       # probability that each eligible individual gets vaccinated
+                                       vaccine_efficacy_infection,             # vaccine efficacy against infection
+                                       vaccine_efficacy_transmission,          # reduction in transmissibility of breakthrough infections in vaccinated individuals
+                                       vaccine_logistical_delay,               # delay between symptom onset and vaccination of contacts (and contacts of contacts) occurring
+                                       vaccine_protection_delay,               # delay between vaccination and protection developing
+
+                                       ## Quarantine Related Parameters
+                                       prob_quarantine,                        # probability that an individual isolates
+                                       onset_to_quarantine,                    # symptom onset to quarantine time distribution
+                                       quarantine_efficacy,                    # effectiveness of the quarantine at reducing onwards transmission
+
+                                       ## Miscellaneous Parameters
+                                       synthetic_household_df,                 # dataframe of synthetic drc household, age and occupation population
+                                       t0 = 0,                                 # simulation starting time
+                                       population,                             # total population size
+                                       check_final_size,                       # maximum number of infections to simulate
+                                       initial_immune = 0,                     # initial number of individuals who are immune
+                                       seeding_cases,                          # number of seeding cases to start the epidemic with
+                                       seed                                    # stochastic seed
                                        ) {
 
   ## Setting the seed
   set.seed(seed)
 
-  ## Setting up the offspring distribution
-  offspring_fun <- function(n, susc) {
-    new_mn <- mn_offspring * susc/population
-    size <- new_mn/(disp_offspring - 1)             #### IS THIS CORRECT??? I SHOULD MAYBE CHANGE THIS, UNCLEAR IF IT'S CORRECT.
-    truncdist::rtrunc(n, spec = "nbinom", b = susc, mu = new_mn, size = size)
-  }
-  susc <- population - initial_immune - 1L ## number of susceptibles remaining
+  ## Setting up the number of susceptibles
+  susc <- population - initial_immune
 
   # Pre-allocate a dataframe with the maximum number of infections that we will simulate
   tdf <- data.frame(
@@ -95,7 +122,26 @@ basic_ring_vaccination_sim <- function(mn_offspring,                       # mea
     n_offspring_post_pruning_2nd_chance = integer(check_final_size),  # number of secondary infections after ring-vaccination second attempt
     secondary_offspring_generated = FALSE,                            # indicator tracking whether secondary infections have been generated for a particular infected individual
     tertiary_offspring_generated = FALSE,                             # indicator tracking whether tertiary infections have been generated for a particular infected individual
+
+    ## new stuff added
+    transmission_route = NA_character_,
+    occupation = NA_character_,
+    age = NA_character_,
+    hh_id = integer(check_final_size),
+    hh_member_index = integer(check_final_size),
+    hh_size = integer(check_final_size),
+    hh_ages = I(vector("list", check_final_size)),
+    hh_occupations = I(vector("list", check_final_size)),
+    hh_infections = NA_real_,
+    hh_infected_index = I(vector("list", check_final_size)),
     stringsAsFactors = FALSE)
+
+  # Sampling the households for the initial seeding cases - we seed this epidemic in sex workers
+  sampled_rows <- synthetic_household_df[get("contains_SW") == 1][sample(.N, seeding_cases)]  # sampling from synthetic hh df a hh that contains a SW
+  seeding_case_occupations <- rep("SW", seeding_cases)
+  seeding_case_indices <- unlist(lapply(sampled_rows$hh_occupations, function(occupations) {
+    which(occupations == "SW")  # Find the indices where "SW" occurs
+  }))
 
   # Initialize the dataframe with the seeding cases
   tdf[1:seeding_cases, ] <- data.frame(
@@ -128,7 +174,19 @@ basic_ring_vaccination_sim <- function(mn_offspring,                       # mea
     n_offspring_post_pruning = NA_integer_,
     n_offspring_post_pruning_2nd_chance = NA_integer_,
     secondary_offspring_generated = FALSE,
-    tertiary_offspring_generated = FALSE)
+    tertiary_offspring_generated = FALSE,
+
+    ## new stuff added here
+    transmission_route = NA_character_,
+    occupation = seeding_case_occupations,
+    age = NA_character_,
+    hh_id = 1:seeding_cases,
+    hh_member_index = seeding_case_indices,
+    hh_size = sampled_rows$hh_size,
+    hh_ages = I(sampled_rows$hh_ages_grouped),
+    hh_occupations = I(sampled_rows$hh_occupations),
+    hh_infections = 1,
+    hh_infected_index = I(as.list(seeding_case_indices)))
 
   ##########################################################################################################################################
   # Generating secondary and tertiary infections from an index case, then pruning the resulting transmission tree via ring-vaccination
