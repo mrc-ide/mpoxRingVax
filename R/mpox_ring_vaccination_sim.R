@@ -58,7 +58,7 @@ basic_ring_vaccination_sim <- function(mn_offspring,                       # mea
   ## Setting up the offspring distribution
   offspring_fun <- function(n, susc) {
     new_mn <- mn_offspring * susc/population
-    size <- new_mn/(disp_offspring - 1)
+    size <- new_mn/(disp_offspring - 1)             #### IS THIS CORRECT??? I SHOULD MAYBE CHANGE THIS, UNCLEAR IF IT'S CORRECT.
     truncdist::rtrunc(n, spec = "nbinom", b = susc, mu = new_mn, size = size)
   }
   susc <- population - initial_immune - 1L ## number of susceptibles remaining
