@@ -1,42 +1,43 @@
 #' @export
 
 load("data/south_kivu_final.rda")
+synthetic_household_df <- south_kivu_final
+household_df <- south_kivu_final[8946, ]
 
-household <- south_kivu_final[south_kivu_final$hh_id == 506, ]
+index_age_group <- "18+"
+index_hh_id <- 8946
+index_occupation <- "SW"
+max_hh_id <- 20
 
-index_age_group <- 3
-index_hh_id <- 10
-index_occupation <- 1
-max_hh_id <- 12
+mn_offspring_sexual_SW <- 5
+disp_offspring_sexual_SW <- 100
+mn_offspring_sexual_PBS <- 5
+disp_offspring_sexual_PBS <- 10
+mn_offspring_sexual_genPop <- 5
+disp_offspring_sexual_genPop <- 10
+sexual_transmission_occupation_matrix <- matrix(data = c(0.00, 0.10, 0.90,
+                                                         0.20, 0.10, 0.70,
+                                                         0.00, 0.90, 0.10), nrow = 3, ncol = 3, byrow = TRUE)
 
-mn_offspring_sexual_SW <- 8
-disp_offspring_sexual_SW <- 1.1
-mn_offspring_sexual_PBS <- 4
-disp_offspring_sexual_PBS <- 1.1
-mn_offspring_sexual_genPop <- 1
-disp_offspring_sexual_genPop <- 1.1
-sexual_transmission_occupation_matrix <- matrix(data = c(0.00, 0.90, 0.10,
-                                                         0.34, 0.33, 0.33,
-                                                         0.00, 0.10, 0.90), nrow = 3, ncol = 3, byrow = TRUE)
-mn_offspring_hh <- 3
-disp_offspring_hh <- 1.1
-index_hh_size <- household$hh_size
-index_hh_prior_infections <- 1
-index_hh_occupations <- household$hh_occupations
+mn_offspring_hh <- 7
+disp_offspring_hh <- 100
+index_hh_member_index <- which(unlist(household_df$hh_occupations) == "SW")
+index_hh_infections_index <- c(1, 4, 14)
+index_hh_size <- household_df$hh_size
+index_hh_prior_infections <- length(index_hh_infections_index)
+index_hh_ages <- unlist(household_df$hh_ages_grouped)
+index_hh_occupations <- unlist(household_df$hh_occupations)
 
-index_hh_ages <- unlist(household$hh_ages_grouped)
-
-mn_offspring_community <- 2
-disp_offspring_community <- 1.1
+mn_offspring_community <- 5
+disp_offspring_community <- 100
 number_susceptible_community <- 10^5
 population_community <- 10^5
 community_transmission_age_matrix <- matrix(data = c(0.34, 0.33, 0.33,
                                                      0.34, 0.33, 0.33,
                                                      0.34, 0.33, 0.33), nrow = 3, ncol = 3, byrow = TRUE)
 
-## Use community_transmission_age_matrix to figure out the ages of the individuals infected, and then select a household that as at least one of those people
-
-offspring_fun <- function(index_age_group,                           # age of the index infection (0-5, 5-18, 18+)
+offspring_fun <- function(synthetic_household_df,                    # dataframe of synthetic drc household/age/occ population
+                          index_age_group,                           # age of the index infection (0-5, 5-18, 18+)
                           index_hh_id,                               # household id of the index infection
                           index_occupation,                          # occupation of the index infection
                           max_hh_id,                                 # maximum current household id
@@ -63,32 +64,26 @@ offspring_fun <- function(index_age_group,                           # age of th
                           number_susceptible_community,              # number of susceptible individuals remaining in the community
                           population_community,                      # overall population size
                           community_transmission_age_matrix,         # rows are the proportions of cases in each age-group a particular age-group gives rises to (note this needs to take into account smallpox vaccination)
-
-                          drc_hh_age_occ_df                          # dataframe of synthetic drc household/age/occ population
 ) {
 
-  ## add in "household member number" to track index of occupations and age that the person is in the vector in the list
-  ## change it so that it doesn't exclude the index infection
-
+  # Helper vectors that will assist with subsetting later on
   age_group_to_column <- c("0-5" = "contains_0_5", "5-18" = "contains_5_18", "18+" = "contains_18plus")
   occupation_to_column <- c("genPop" = "contains_genPop", "PBS" = "contains_PBS", "SW" = "contains_SW")
+  age_group_to_index <- c("0-5" = 1, "5-18" = 2, "18+" = 3)
+  occupation_to_index <- c("genPop" = 1, "PBS" = 2, "SW" = 3)
 
-
-  #########################################################################################################################
-  ## Generating infections from sexual transmission and their characteristics
+  ###################################################################################################################################
+  ## SEXUAL INFECTIONS: Generating infections from sexual transmission and their characteristics
   ## - Note that we assume:
   ##     1) All SW and PBS are >18
   ##     2) No sexual transmission to/from <18
   ##     3) Single mpox introduction per household (thus all infections are in newly instantiated and separate households)
-  #########################################################################################################################
-  if (index_age_group %in% c("0-5", "5-18")) {
-    num_offspring_sexual <- 0
-    offspring_sexual_new_hh_id <- max_hh_id
-    offspring_characteristics_df_sexual <- data.frame(transmission_route = character(0),
-                                                      occupation = character(0),
-                                                      age = character(0),
-                                                      hh_id = numeric(0))
-  } else {
+  ###################################################################################################################################
+
+  ## Generating sexual transmission offspring
+
+  # Sexual transmission only in those aged >18+, in a manner dependent on their occupation
+  if (index_age_group %in% c("18+")) {
     if (index_occupation == "SW") {
       num_offspring_sexual <- rnbinom(n = 1, mu = mn_offspring_sexual_SW, size = disp_offspring_sexual_SW)
     } else if (index_occupation == "PBS") {
@@ -99,22 +94,68 @@ offspring_fun <- function(index_age_group,                           # age of th
       stop("something has gone wrong with the sexual offspring distribution generation of infections")
     }
 
-    if (num_offspring_sexual > 0) {
-      offspring_sexual_occupation <- sample(x = c("SW", "PBS", "genPop"), size = num_offspring_sexual,
-                                            prob = sexual_transmission_occupation_matrix[index_occupation, ], replace = TRUE)
-      offspring_sexual_ages <- rep("18+", num_offspring_sexual)
-      offspring_sexual_new_hh_id <- max_hh_id + 1:num_offspring_sexual
-      offspring_characteristics_df_sexual <- data.frame(transmission_route = "sexual",
-                                                        occupation = offspring_sexual_occupation,
-                                                        age = offspring_sexual_ages,
-                                                        hh_id = offspring_sexual_new_hh_id)
-    } else {
-      offspring_characteristics_df_sexual <- data.frame(transmission_route = character(0),
-                                                        occupation = character(0),
-                                                        age = character(0),
-                                                        hh_id = numeric(0))
-    }
+  ## If individuals are <18, no sexual transmission occurs
+  } else {
+    num_offspring_sexual <- 0
   }
+
+  ## If sexual offspring are generated, create them and imbue them with all the required characteristics
+  if (num_offspring_sexual > 0) {
+
+    offspring_sexual_list <- vector("list", num_offspring_sexual)         # list to temporarily store outputs
+    occupation_matrix_index <- occupation_to_index[index_occupation]
+    offspring_sexual_occupations <- sample(c("SW", "PBS", "genPop"),      # sample occupations of sexual offspring
+                                           size = num_offspring_sexual,
+                                           prob = sexual_transmission_occupation_matrix[occupation_matrix_index, ],
+                                           replace = TRUE)
+    offspring_sexual_new_hh_id <- max_hh_id + 1:num_offspring_sexual # enumerate the household id of each of the sexual offspring (generated in a new household)
+
+    ## Looping through sexual offspring and sampling details of their occupation and household that they belong to, and their occupation
+    for (i in 1:num_offspring_sexual) {
+
+      ## Sampling a household for sexual offspring to be produced into, based on the occupation group of the index infection
+      offspring_sexual_occupation_group <- offspring_sexual_occupations[i]         # occupation of the offspring
+      col_name <- occupation_to_column[offspring_sexual_occupation_group]          # relevant column in the synthetic hh df for sampling from
+      sampled_row <- synthetic_household_df[get(col_name) == 1][sample(.N, 1)]     # sampling from synthetic hh df a hh that contains a member of the offspring's occupation
+
+      ## Picking the particular household member infected
+      possible_hh_member_indices <- which(unlist(sampled_row$hh_occupations) %in% offspring_sexual_occupation_group)
+      if (length(possible_hh_member_indices == 1)) {
+        hh_member_index <- possible_hh_member_indices
+      } else {
+        hh_member_index <- sample(possible_hh_member_indices, 1) # sampling which individual with that occupation in the hh is the infection
+      }
+
+      ## Creating dataframe with information on this particular offspring
+      offspring_sexual_list[[i]] <- data.table::data.table(transmission_route = "sexual",                                     # transmission route
+                                                           occupation = unlist(sampled_row$hh_occupations)[hh_member_index],  # occupation of the offspring
+                                                           age = "18+",                                                       # age of the offspring
+                                                           hh_id = offspring_sexual_new_hh_id[i],                             # hh id of the new hh that offspring is in
+                                                           hh_member_index = hh_member_index,                                 # index of this infection within hh members
+                                                           hh_size = sampled_row$hh_size,                                     # hh size
+                                                           hh_ages = sampled_row$hh_ages,                                     # ages of individuals in the household
+                                                           hh_occupations = sampled_row$hh_occupations,                       # occupations of individuals in the household
+                                                           hh_infections = 1,                                                 # cumulative number of infections in that household so far
+                                                           hh_infected_index = hh_member_index)                               # index of all infections in this hh that have been infected
+    }
+
+    offspring_characteristics_df_sexual <- data.table::rbindlist(offspring_sexual_list, fill = TRUE)
+
+  ## If no sexual offspring generated, initialise an empty sexual offspring df
+  } else {
+    offspring_characteristics_df_sexual <- data.frame(transmission_route = character(0),
+                                                      occupation = character(0),
+                                                      age = character(0),
+                                                      hh_id = numeric(0),
+                                                      hh_member_index = numeric(0),
+                                                      hh_size = numeric(0),
+                                                      hh_ages = numeric(0),
+                                                      hh_occupations = numeric(0),
+                                                      hh_infections = numeric(0),
+                                                      hh_infected_index = numeric(0))
+  }
+
+  #########################################################################################################################################
 
   ##########################################################################################################################################
   ## HOUSEHOLD INFECTIONS: Generating infections from household transmission and their characteristics
@@ -173,8 +214,8 @@ offspring_fun <- function(index_age_group,                           # age of th
   ## If community offspring are generated, create them and imbue them with all the required characteristics
   if (num_offspring_community > 0) {
 
-    offspring_list <- vector("list", num_offspring_community)    # list to temporarily store outputs
-    offspring_community_ages <- sample(c("0-5", "5-18", "18+"),  # sample ages of community offspring
+    offspring_community_list <- vector("list", num_offspring_community)  # list to temporarily store outputs
+    offspring_community_ages <- sample(c("0-5", "5-18", "18+"),          # sample ages of community offspring
                                        size = num_offspring_community,
                                        prob = community_transmission_age_matrix[index_age_group, ],
                                        replace = TRUE)
@@ -184,21 +225,20 @@ offspring_fun <- function(index_age_group,                           # age of th
     for (i in 1:num_offspring_community) {
       offspring_community_age_group <- offspring_community_ages[i]
       col_name <- age_group_to_column[offspring_community_age_group]
-      sampled_row <- south_kivu_final[get(col_name) == 1][sample(.N, 1)]
+      sampled_row <- synthetic_household_df[get(col_name) == 1][sample(.N, 1)]
       hh_member_index <- sample(which(unlist(sampled_row$hh_ages_grouped) %in% offspring_community_age_group), 1)
-      offspring_list[[i]] <- data.table::data.table(transmission_route = "community",
-                                                    occupation = unlist(sampled_row$hh_occupations)[hh_member_index],
-                                                    age = offspring_community_age_group,
-                                                    hh_id = offspring_community_new_hh_id[i],
-                                                    hh_member_index = hh_member_index,
-                                                    hh_size = sampled_row$hh_size,
-                                                    hh_ages = sampled_row$hh_ages,
-                                                    hh_occupations = sampled_row$hh_occupations,
-                                                    hh_infections = 1,
-                                                    hh_infected_index = hh_member_index)
+      offspring_community_list[[i]] <- data.table::data.table(transmission_route = "community",
+                                                              occupation = unlist(sampled_row$hh_occupations)[hh_member_index],
+                                                              age = offspring_community_age_group,
+                                                              hh_id = offspring_community_new_hh_id[i],
+                                                              hh_member_index = hh_member_index,
+                                                              hh_size = sampled_row$hh_size,
+                                                              hh_ages = sampled_row$hh_ages,
+                                                              hh_occupations = sampled_row$hh_occupations,
+                                                              hh_infections = 1,
+                                                              hh_infected_index = hh_member_index)
     }
-
-    offspring_characteristics_df_community <- data.table::rbindlist(offspring_list, fill = TRUE)
+    offspring_characteristics_df_community <- data.table::rbindlist(offspring_community_list, fill = TRUE)
 
   ## If no community offspring generated, initialise an empty community offspring df
   } else {
