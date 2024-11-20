@@ -325,6 +325,8 @@ basic_ring_vaccination_sim <- function(## Sexual Transmission Parameters
           index_offspring_function_draw$num_offspring_hh <- sum(index_offspring_function_draw$offspring_characteristics$transmission_route == "household")
           index_offspring_function_draw$num_offspring_community <- sum(index_offspring_function_draw$offspring_characteristics$transmission_route == "community")
 
+          #### need to modify index_offspring_function_draw$new_hh_infected_index as well!!! Or consider removing it from offspring_fun if I won't use it in the end.
+
           ## New total number of offspring produced as a result of  reduced transmissibility of the breakthrough infection
           index_n_offspring <- length(index_offspring_retained_index)
         }
@@ -358,6 +360,7 @@ basic_ring_vaccination_sim <- function(## Sexual Transmission Parameters
         ###################################################################################################################################################################################
         if ((index_onset_time_absolute < vaccine_start) | index_asymptomatic == 1) {
 
+          ## Add information of new infections to the main storage dataframe
           tdf[(current_max_row+1):(current_max_row+index_n_offspring), "id"] <- c(current_max_id + seq_len(index_n_offspring))
           tdf[(current_max_row+1):(current_max_row+index_n_offspring), "parent"] <- index_id
           tdf[(current_max_row+1):(current_max_row+index_n_offspring), "generation"] <- index_gen + 1L
@@ -384,7 +387,6 @@ basic_ring_vaccination_sim <- function(## Sexual Transmission Parameters
           tdf[(current_max_row+1):(current_max_row+index_n_offspring), "n_offspring_post_pruning_2nd_chance"] <- NA
           tdf[(current_max_row+1):(current_max_row+index_n_offspring), "secondary_offspring_generated"] <- FALSE
           tdf[(current_max_row+1):(current_max_row+index_n_offspring), "tertiary_offspring_generated"] <- FALSE
-          ## new stuff added here
           tdf[(current_max_row+1):(current_max_row+index_n_offspring), "transmission_route"] <- index_offspring_function_draw$offspring_characteristics$transmission_route
           tdf[(current_max_row+1):(current_max_row+index_n_offspring), "occupation"] <- index_offspring_function_draw$offspring_characteristics$occupation
           tdf[(current_max_row+1):(current_max_row+index_n_offspring), "age"] <- index_offspring_function_draw$offspring_characteristics$age
@@ -396,20 +398,9 @@ basic_ring_vaccination_sim <- function(## Sexual Transmission Parameters
           tdf[(current_max_row+1):(current_max_row+index_n_offspring), "hh_infections"] <- index_offspring_function_draw$offspring_characteristics$hh_infections
           tdf[(current_max_row+1):(current_max_row+index_n_offspring), "hh_infected_index"] <- I(as.list(index_offspring_function_draw$offspring_characteristics$hh_infected_index))
 
+          # No ring vaccination so index_pruned_n_offspring is same as index_n_offspring
           index_pruned_n_offspring <- index_n_offspring # number of secondary infections after accounting for vaccination's effect on transmission in breakthrough infections AND quarantine AND ring vaccination (which doesn't occur in this case)
           tdf$n_offspring_post_pruning[index_idx] <- index_pruned_n_offspring
-
-          # Update the index case's information regarding the additional household infections (if there are any)
-          if (any(index_offspring_function_draw$offspring_characteristics$transmission_route == "household")) {
-
-            new_hh_infections <- sum(index_offspring_function_draw$offspring_characteristics$transmission_route == "household")
-            tdf$hh_infections[index_idx] <- index_hh_infections + sum(index_offspring_function_draw$offspring_characteristics$transmission_route == "household")
-
-            new_hh_infections_index <- index_offspring_function_draw$offspring_characteristics$hh_infected_index[index_offspring_function_draw$offspring_characteristics$transmission_route == "household"]
-            all_hh_infections_index <- c(unlist(tdf$hh_infected_index[index_idx]), new_hh_infections_index)
-            all_hh_infections_index <- all_hh_infections_index[order(all_hh_infections_index)]
-            tdf$hh_infected_index[index_idx] <- as.list(all_hh_infections_index)
-          }
 
         ###################################################################################################################################################################################
         # If ring-vaccination can occur, calculate timings of secondary infections relative to ring vaccination, assess which infections are prevented, prune the transmission tree
@@ -441,6 +432,8 @@ basic_ring_vaccination_sim <- function(## Sexual Transmission Parameters
           }
 
           ## Pruning the secondary infections after applying ring-vaccination
+
+          #### CFWNOTE: need to add a bunch of stuff here still
           index_pruned_n_offspring <- sum(secondary_infection_retained)          # number of secondary infections after accounting for ring vaccination, vaccination's effect on transmission in breakthrough infections AND quarantine
           tdf$n_offspring_post_pruning[index_idx] <- index_pruned_n_offspring
           retained_index <- which(secondary_infection_retained == 1)                                                                             # which secondary infections were NOT averted by ring-vaccination and thus are retained for inclusion in the dataframe
@@ -451,6 +444,7 @@ basic_ring_vaccination_sim <- function(## Sexual Transmission Parameters
           secondary_time_protected <- ifelse(secondary_vaccinated_successfully[retained_index] == 1, time_to_contact_vaccination_protection, NA) # of the retained infections, when are they protected (relative to infection time of index)
           secondary_protected_before_infection <- ifelse(is.na(secondary_time_protected), NA, ifelse(secondary_time_protected <= secondary_pruned_infection_times, 1, 0))  # retained infections were protected by vaccine before infection (i.e. vaccine protection successfully developed but failed to protect)
           secondary_protected_after_infection <- ifelse(is.na(secondary_time_protected), NA, ifelse(secondary_time_protected > secondary_pruned_infection_times, 1, 0))    # retained infections were NOT protected by vaccine before infection (i.e. vaccine protection did not develop in time to protect)
+          #### CFWNOTE: need to add a bunch of stuff here
 
           ## Adding secondary infections that aren't prevented by ring-vaccination to the overall dataframe
           if (index_pruned_n_offspring != 0) {
@@ -481,8 +475,37 @@ basic_ring_vaccination_sim <- function(## Sexual Transmission Parameters
             tdf[(current_max_row+1):(current_max_row+index_pruned_n_offspring), "n_offspring_post_pruning_2nd_chance"] <- NA
             tdf[(current_max_row+1):(current_max_row+index_pruned_n_offspring), "secondary_offspring_generated"] <- FALSE
             tdf[(current_max_row+1):(current_max_row+index_pruned_n_offspring), "tertiary_offspring_generated"] <- FALSE
+            tdf[(current_max_row+1):(current_max_row+index_pruned_n_offspring), "transmission_route"] <- index_offspring_function_draw$offspring_characteristics$transmission_route
+            tdf[(current_max_row+1):(current_max_row+index_pruned_n_offspring), "occupation"] <- index_offspring_function_draw$offspring_characteristics$occupation
+            tdf[(current_max_row+1):(current_max_row+index_pruned_n_offspring), "age"] <- index_offspring_function_draw$offspring_characteristics$age
+            tdf[(current_max_row+1):(current_max_row+index_pruned_n_offspring), "hh_id"] <- index_offspring_function_draw$offspring_characteristics$hh_id
+            tdf[(current_max_row+1):(current_max_row+index_pruned_n_offspring), "hh_member_index"] <- index_offspring_function_draw$offspring_characteristics$hh_member_index
+            tdf[(current_max_row+1):(current_max_row+index_pruned_n_offspring), "hh_size"] <- index_offspring_function_draw$offspring_characteristics$hh_size
+            tdf[(current_max_row+1):(current_max_row+index_pruned_n_offspring), "hh_ages"] <- I(index_offspring_function_draw$offspring_characteristics$hh_ages)
+            tdf[(current_max_row+1):(current_max_row+index_pruned_n_offspring), "hh_occupations"] <- I(index_offspring_function_draw$offspring_characteristics$hh_occupations)
+            tdf[(current_max_row+1):(current_max_row+index_pruned_n_offspring), "hh_infections"] <- index_offspring_function_draw$offspring_characteristics$hh_infections
+            tdf[(current_max_row+1):(current_max_row+index_pruned_n_offspring), "hh_infected_index"] <- I(as.list(index_offspring_function_draw$offspring_characteristics$hh_infected_index))
 
           }
+        }
+
+        ## Update all the previous infections in the household regarding the additional household infections (if there are any)
+        ### NOTE: Need to check this actually works the way I've intended it - IS THIS THE RIGHT PLACE IN THE IF/ELSE STATEMENT FOR IT???
+        ### I THINK SO, AND I THINK HERE MEANS WE DON'T HAVE TO DO IT TWICE IN BOTH THE IF (NO RING VAX) AND ELSE (RING VAX) PARTS
+        ### JUST NEED TO DOUBLE CHECK THEY'RE CONSISTENT IN WHAT'S REQUIRED FOR THIS PART.
+        if (any(index_offspring_function_draw$offspring_characteristics$transmission_route == "household")) {
+
+          ## Getting all infections previously generated in this household
+          hh_row_index <- which(tdf$hh_id == index_hh_id)
+
+          ## Updating the tally of cumulative number of infections in the household for the index case and all other prior infections in the household
+          tdf$hh_infections[hh_row_index] <- index_hh_infections + index_offspring_function_draw$num_offspring_hh
+
+          ## Updating the list of the indices of all infected individuals in the household for the index case
+          new_hh_infections_index <- index_offspring_function_draw$offspring_characteristics$hh_infected_index[index_offspring_function_draw$offspring_characteristics$transmission_route == "household"]
+          all_hh_infections_index <- c(unlist(tdf$hh_infected_index[index_idx]), new_hh_infections_index)
+          all_hh_infections_index <- all_hh_infections_index[order(all_hh_infections_index)]
+          tdf$hh_infected_index[hh_row_index] <- as.list(all_hh_infections_index)
         }
 
       ###################################################################################################################################################
