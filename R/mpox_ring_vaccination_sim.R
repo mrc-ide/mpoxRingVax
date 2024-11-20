@@ -507,15 +507,34 @@ basic_ring_vaccination_sim <- function(## Sexual Transmission Parameters
           secondary_protected_before_infection <- ifelse(is.na(secondary_time_protected), NA, ifelse(secondary_time_protected <= secondary_pruned_infection_times, 1, 0))  # retained infections were protected by vaccine before infection (i.e. vaccine protection successfully developed but failed to protect)
           secondary_protected_after_infection <- ifelse(is.na(secondary_time_protected), NA, ifelse(secondary_time_protected > secondary_pruned_infection_times, 1, 0))    # retained infections were NOT protected by vaccine before infection (i.e. vaccine protection did not develop in time to protect)
 
+          ## Subsetting index_offspring_function_draw to get the infections that don't occur because of the reduced transmissibility of breakthrough infections
+          index_offspring_ring_vaccine_averted_index <- which(secondary_infection_retained == 0)
+          index_offspring_ring_vaccine_averted_transmission_route <- index_offspring_function_draw$offspring_characteristics$transmission_route[index_offspring_ring_vaccine_averted_index]
+          index_offspring_ring_vaccine_averted_hh_member_index <- index_offspring_function_draw$offspring_characteristics$hh_member_index[index_offspring_ring_vaccine_averted_index]
+
           ## Updating index_offspring_function_draw to reflect the infections averted because of ring vaccination
           index_offspring_function_draw$offspring_characteristics <- index_offspring_function_draw$offspring_characteristics[retained_index, ]
           index_offspring_function_draw$total_offspring <- length(retained_index)
           index_offspring_function_draw$num_offspring_sexual <- sum(index_offspring_function_draw$offspring_characteristics$transmission_route == "sexual")
           index_offspring_function_draw$num_offspring_hh <- sum(index_offspring_function_draw$offspring_characteristics$transmission_route == "household")
           index_offspring_function_draw$num_offspring_community <- sum(index_offspring_function_draw$offspring_characteristics$transmission_route == "community")
-          ### CFWNOTE: MORE MODIFICATION TO DO HERE I THINK - IF ANY OF THE PREVENTED INFECTIONS HERE ARE HH INFECTIONS, WE'LL NEED TO UPDATE
-          ###          EACH OF THE RETAINED HH INFECTIONS HH_INFECTED INDEX TO REFLECT REMOVAL.
-          ###          EACH OF THE RETAINED HH INFECTIONS HH_INFECTED INDEX TO REFLECT REMOVAL. YEP - THINK THIS PROBABLY STILL TO COME!!!
+
+          ## If any of the averted infections are household ones, update the info of any remaining household infections there
+          if ("household" %in% index_offspring_ring_vaccine_averted_transmission_route) {
+
+            ## Removing the averted household infections from the cumulative total
+            index_offspring_num_household_infections_averted <- sum(index_offspring_ring_vaccine_averted_transmission_route == "household")
+            index_offspring_function_draw$new_hh_cumulative_infections <- index_offspring_function_draw$new_hh_cumulative_infections - index_offspring_num_household_infections_averted
+            index_offspring_function_draw$offspring_characteristics$hh_infections[index_offspring_function_draw$offspring_characteristics$transmission_route == "household"] <- index_offspring_function_draw$new_hh_cumulative_infections
+
+            ## Modifying the list of all ids of infected household members to account for the averted infections
+            index_offspring_ring_vaccine_averted_household_member_id <- index_offspring_ring_vaccine_averted_hh_member_index[which(index_offspring_ring_vaccine_averted_transmission_route == "household")]
+            index_offspring_ring_vaccine_averted_household_member_index_for_removal <- which(unlist(index_offspring_function_draw$new_hh_infected_index) %in% index_offspring_ring_vaccine_averted_household_member_id)
+            index_offspring_function_draw$new_hh_infected_index <- list(unlist(index_offspring_function_draw$new_hh_infected_index)[-index_offspring_ring_vaccine_averted_household_member_index_for_removal])
+            index_offspring_function_draw$offspring_characteristics$hh_infected_index[index_offspring_function_draw$offspring_characteristics$transmission_route == "household"] <- I(index_offspring_function_draw$new_hh_infected_index)
+            ## CFWNOTE: when there's only 1 hh_infected_index left, this is being coerced to numeric rather than list. Need to check that's not introducing any issues later on.
+
+          }
 
           ## Adding secondary infections that aren't prevented by ring-vaccination to the overall dataframe
           if (index_pruned_n_offspring != 0) {
@@ -581,6 +600,10 @@ basic_ring_vaccination_sim <- function(## Sexual Transmission Parameters
         tdf$n_offspring_post_pruning[index_idx] <- 0
         tdf$n_offspring_post_pruning_2nd_chance[index_idx] <- 0
       }
+
+    #########################
+    ##### GOT TO HERE
+    #########################
 
     ##################################################################################################################################################################################
     # If we have already generated secondary offspring for the index infection, calculate whether any of these infections are removed by the second chance at being ring-vaccinated
