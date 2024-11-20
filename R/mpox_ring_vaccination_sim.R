@@ -327,6 +327,8 @@ basic_ring_vaccination_sim <- function(## Sexual Transmission Parameters
           index_offspring_function_draw$num_offspring_hh <- sum(index_offspring_function_draw$offspring_characteristics$transmission_route == "household")
           index_offspring_function_draw$num_offspring_community <- sum(index_offspring_function_draw$offspring_characteristics$transmission_route == "community")
 
+          ### CFWNOTE: MORE MODIFICATION TO DO HERE I THINK - IF ANY OF THE PREVENTED INFECTIONS HERE ARE HH INFECTIONS, WE'LL NEED TO UPDATE
+          ###          EACH OF THE RETAINED HH INFECTIONS HH_INFECTED INDEX TO REFLECT REMOVAL.
           #### need to modify index_offspring_function_draw$new_hh_infected_index as well!!! Or consider removing it from offspring_fun if I won't use it in the end.
 
           ## New total number of offspring produced as a result of  reduced transmissibility of the breakthrough infection
@@ -451,6 +453,8 @@ basic_ring_vaccination_sim <- function(## Sexual Transmission Parameters
           index_offspring_function_draw$num_offspring_sexual <- sum(index_offspring_function_draw$offspring_characteristics$transmission_route == "sexual")
           index_offspring_function_draw$num_offspring_hh <- sum(index_offspring_function_draw$offspring_characteristics$transmission_route == "household")
           index_offspring_function_draw$num_offspring_community <- sum(index_offspring_function_draw$offspring_characteristics$transmission_route == "community")
+          ### CFWNOTE: MORE MODIFICATION TO DO HERE I THINK - IF ANY OF THE PREVENTED INFECTIONS HERE ARE HH INFECTIONS, WE'LL NEED TO UPDATE
+          ###          EACH OF THE RETAINED HH INFECTIONS HH_INFECTED INDEX TO REFLECT REMOVAL.
 
           ## Adding secondary infections that aren't prevented by ring-vaccination to the overall dataframe
           if (index_pruned_n_offspring != 0) {
@@ -758,10 +762,29 @@ basic_ring_vaccination_sim <- function(## Sexual Transmission Parameters
         tdf$n_offspring[secondary_idx] <- secondary_n_offspring
         tdf$secondary_offspring_generated[secondary_idx] <- TRUE
 
-        ##### then doing vaccination (still need to do this)
+        ## If secondary infection was vaccinated, account for vaccination's effect on transmission in breakthrough infections
+        ### Note: When vaccine_efficacy_transmission is 1, does that introduce NAs that get passed through to the next section. What effect does that have?
         if (secondary_vaccinated == 1) {
           if (secondary_time_protected < secondary_time_infection) {
-            secondary_n_offspring <- sum(rbinom(n = secondary_n_offspring, size = 1, prob = 1 - vaccine_efficacy_transmission))
+
+            ## Binomial draw to decide which infections are not averted by the reduced transmissibility of the breakthrough infection
+            secondary_offspring_retained_index <- rbinom(n = secondary_n_offspring, size = 1, prob = 1 - vaccine_efficacy_transmission)
+
+            ## Subsetting secondary_offspring_function_draw to reflect the averted infections because of reduced transmissibility of the breakthrough infection
+            secondary_offspring_function_draw$offspring_characteristics <- secondary_offspring_function_draw$offspring_characteristics[secondary_offspring_retained_index, ]
+            secondary_offspring_function_draw$total_offspring <- length(secondary_offspring_retained_index)
+            secondary_offspring_function_draw$num_offspring_sexual <- sum(secondary_offspring_function_draw$offspring_characteristics$transmission_route == "sexual")
+            secondary_offspring_function_draw$num_offspring_hh <- sum(secondary_offspring_function_draw$offspring_characteristics$transmission_route == "household")
+            secondary_offspring_function_draw$num_offspring_community <- sum(secondary_offspring_function_draw$offspring_characteristics$transmission_route == "community")
+
+            ### CFWNOTE: MORE MODIFICATION TO DO HERE I THINK - IF ANY OF THE PREVENTED INFECTIONS HERE ARE HH INFECTIONS, WE'LL NEED TO UPDATE
+            ###          EACH OF THE RETAINED HH INFECTIONS HH_INFECTED INDEX TO REFLECT REMOVAL.
+
+            #### need to modify secondary_offspring_function_draw$new_hh_infected_index as well!!! Or consider removing it from offspring_fun if I won't use it in the end.
+
+            ## New total number of offspring produced as a result of  reduced transmissibility of the breakthrough infection
+            secondary_n_offspring <- length(secondary_offspring_retained_index)
+
           }
         }
         tdf$n_offspring_new[secondary_idx] <- secondary_n_offspring
@@ -770,6 +793,8 @@ basic_ring_vaccination_sim <- function(## Sexual Transmission Parameters
         ################################################################################################################################################################
         ## Removing any infections that are averted due to quarantining (assumed to occur secondary_time_quarantine after symptom onset, which is secondary_onset_time)
         ################################################################################################################################################################
+        ## If secondary infection quarantines, reduce tertiary infections - note that quarantine only occurs if infection has symptoms
+        ### NOTE: STILL TO ADD - QUARANTINING HAVING A DIFFERENT EFFECT ON HOUSEHOLD VS COMMUNITY/SEXUAL INFECTIONS. ADD THIS IN LATER.
         if (secondary_quarantine == 1 & secondary_asymptomatic == 0) {
           secondary_quarantine_possible_avert <- ifelse((secondary_onset_time + secondary_time_quarantine) < tertiary_infection_times, 1, 0)            # if infection occurs later than quarantining, it can be averted by quarantine
           secondary_quarantine_averted <- rbinom(n = secondary_n_offspring, size = 1, prob = secondary_quarantine_possible_avert * quarantine_efficacy) # is the infection actually averted by the quarantining (which can be imperfect)
@@ -791,8 +816,7 @@ basic_ring_vaccination_sim <- function(## Sexual Transmission Parameters
           ###################################################################################################################################################################################
           if ((index_onset_time_absolute < vaccine_start) | index_asymptomatic == 1) {
 
-            tdf$n_offspring_post_pruning[secondary_idx] <- secondary_n_offspring
-
+            ## Add information of new infections to the main storage dataframe
             tdf[(current_max_row+1):(current_max_row+secondary_n_offspring), "id"] <- c(current_max_id + seq_len(secondary_n_offspring))
             tdf[(current_max_row+1):(current_max_row+secondary_n_offspring), "parent"] <- secondary_id
             tdf[(current_max_row+1):(current_max_row+secondary_n_offspring), "generation"] <- secondary_gen + 1L
@@ -819,6 +843,23 @@ basic_ring_vaccination_sim <- function(## Sexual Transmission Parameters
             tdf[(current_max_row+1):(current_max_row+secondary_n_offspring), "n_offspring_post_pruning_2nd_chance"] <- NA
             tdf[(current_max_row+1):(current_max_row+secondary_n_offspring), "secondary_offspring_generated"] <- FALSE
             tdf[(current_max_row+1):(current_max_row+secondary_n_offspring), "tertiary_offspring_generated"] <- FALSE
+            tdf[(current_max_row+1):(current_max_row+secondary_n_offspring), "transmission_route"] <- secondary_offspring_function_draw$offspring_characteristics$transmission_route
+            tdf[(current_max_row+1):(current_max_row+secondary_n_offspring), "occupation"] <- secondary_offspring_function_draw$offspring_characteristics$occupation
+            tdf[(current_max_row+1):(current_max_row+secondary_n_offspring), "age"] <- secondary_offspring_function_draw$offspring_characteristics$age
+            tdf[(current_max_row+1):(current_max_row+secondary_n_offspring), "hh_id"] <- secondary_offspring_function_draw$offspring_characteristics$hh_id
+            tdf[(current_max_row+1):(current_max_row+secondary_n_offspring), "hh_member_index"] <- secondary_offspring_function_draw$offspring_characteristics$hh_member_index
+            tdf[(current_max_row+1):(current_max_row+secondary_n_offspring), "hh_size"] <- secondary_offspring_function_draw$offspring_characteristics$hh_size
+            tdf[(current_max_row+1):(current_max_row+secondary_n_offspring), "hh_ages"] <- I(secondary_offspring_function_draw$offspring_characteristics$hh_ages)
+            tdf[(current_max_row+1):(current_max_row+secondary_n_offspring), "hh_occupations"] <- I(secondary_offspring_function_draw$offspring_characteristics$hh_occupations)
+            tdf[(current_max_row+1):(current_max_row+secondary_n_offspring), "hh_infections"] <- secondary_offspring_function_draw$offspring_characteristics$hh_infections
+            tdf[(current_max_row+1):(current_max_row+secondary_n_offspring), "hh_infected_index"] <- I(as.list(secondary_offspring_function_draw$offspring_characteristics$hh_infected_index))
+
+            # No ring vaccination so n_offspring_post_pruning is same as secondary_n_offspring
+            tdf$n_offspring_post_pruning[secondary_idx] <- secondary_n_offspring
+
+          ############################################################
+          #### GOT TO HERE
+          ############################################################
 
           ###################################################################################################################################################################################
           # If ring-vaccination can occur, calculate timings of tertiary infections relative to ring vaccination, assess which infections are prevented, prune the transmission tree
@@ -893,6 +934,10 @@ basic_ring_vaccination_sim <- function(## Sexual Transmission Parameters
               tdf[(current_max_row+1):(current_max_row+secondary_pruned_n_offspring), "tertiary_offspring_generated"] <- FALSE
             }
           }
+
+        ## CFWNOTE: DON'T FORGET TO Update all the previous infections in the household regarding the additional household infections (if there are any)
+        ## LIKE AT THE END OF THE SECONDARY INFECTIONS STUFF
+
         ###################################################################################################################################################
         # If this index infection does not end up generating tertiary infections after accounting for ring vaccination
         ###################################################################################################################################################
