@@ -59,6 +59,8 @@ community_transmission_age_matrix <- matrix(data = c(0.34, 0.33, 0.33,
                                                      0.34, 0.33, 0.33), nrow = 3, ncol = 3, byrow = TRUE)
 vaccine_efficacy_transmission <- 0.5
 generation_time <- function(n) { rep(10, n)}
+vaccine_coverage <- 0.5
+vaccine_efficacy_infection <- 0.8
 
 #' @export
 basic_ring_vaccination_sim <- function(## Sexual Transmission Parameters
@@ -432,8 +434,6 @@ basic_ring_vaccination_sim <- function(## Sexual Transmission Parameters
           }
 
           ## Pruning the secondary infections after applying ring-vaccination
-
-          #### CFWNOTE: need to add a bunch of stuff here still
           index_pruned_n_offspring <- sum(secondary_infection_retained)          # number of secondary infections after accounting for ring vaccination, vaccination's effect on transmission in breakthrough infections AND quarantine
           tdf$n_offspring_post_pruning[index_idx] <- index_pruned_n_offspring
           retained_index <- which(secondary_infection_retained == 1)                                                                             # which secondary infections were NOT averted by ring-vaccination and thus are retained for inclusion in the dataframe
@@ -444,7 +444,13 @@ basic_ring_vaccination_sim <- function(## Sexual Transmission Parameters
           secondary_time_protected <- ifelse(secondary_vaccinated_successfully[retained_index] == 1, time_to_contact_vaccination_protection, NA) # of the retained infections, when are they protected (relative to infection time of index)
           secondary_protected_before_infection <- ifelse(is.na(secondary_time_protected), NA, ifelse(secondary_time_protected <= secondary_pruned_infection_times, 1, 0))  # retained infections were protected by vaccine before infection (i.e. vaccine protection successfully developed but failed to protect)
           secondary_protected_after_infection <- ifelse(is.na(secondary_time_protected), NA, ifelse(secondary_time_protected > secondary_pruned_infection_times, 1, 0))    # retained infections were NOT protected by vaccine before infection (i.e. vaccine protection did not develop in time to protect)
-          #### CFWNOTE: need to add a bunch of stuff here
+
+          ## Updating index_offspring_function_draw to reflect the infections averted because of ring vaccination
+          index_offspring_function_draw$offspring_characteristics <- index_offspring_function_draw$offspring_characteristics[retained_index, ]
+          index_offspring_function_draw$total_offspring <- length(retained_index)
+          index_offspring_function_draw$num_offspring_sexual <- sum(index_offspring_function_draw$offspring_characteristics$transmission_route == "sexual")
+          index_offspring_function_draw$num_offspring_hh <- sum(index_offspring_function_draw$offspring_characteristics$transmission_route == "household")
+          index_offspring_function_draw$num_offspring_community <- sum(index_offspring_function_draw$offspring_characteristics$transmission_route == "community")
 
           ## Adding secondary infections that aren't prevented by ring-vaccination to the overall dataframe
           if (index_pruned_n_offspring != 0) {
