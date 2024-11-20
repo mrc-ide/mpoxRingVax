@@ -646,10 +646,6 @@ basic_ring_vaccination_sim <- function(## Sexual Transmission Parameters
           secondary_infection_times <- tdf$time_infection_relative_parent[tdf$parent == index_id & !is.na(tdf$parent)]
           secondary_vaccination_status <- tdf$vaccinated[tdf$parent == index_id & !is.na(tdf$parent)] # whether those individuals were vaccinated at the first opportunity they had for ring-vaccination (i.e. when they were a tertiary infection)
 
-          if (index_pruned_n_offspring_pre_second_chance != length(secondary_infection_ids)) {
-            stop("something's gone wrong with second round of pruning")
-          }
-
           ## Looping over secondary infections and evaluating whether they're vaccinated, protected and/or prevented in this second chance at ring-vaccination
           for (i in 1:index_pruned_n_offspring_pre_second_chance) {
 
@@ -671,29 +667,32 @@ basic_ring_vaccination_sim <- function(## Sexual Transmission Parameters
           index_pruned_n_offspring <- sum(secondary_infection_retained_2nd_chance)
           tdf$n_offspring_post_pruning_2nd_chance[tdf$id == index_id & !is.na(tdf$parent)] <- index_pruned_n_offspring
 
-          ## Removing the infections averted in this second ring vaccination attempt and modifying hh-related contents of household members of averted infections
-          removed_index_2nd_chance <- which(secondary_infection_retained_2nd_chance == 0) # which secondary infections are averted by ring-vaccination second attempt
-          removed_id_2nd_chance <- secondary_infection_ids[removed_index_2nd_chance]      # id of secondary infections averted by ring-vaccination second attempt
-          if (sum(removed_id_2nd_chance) != 0) {
+          ## Removing the infections averted in this second ring vaccination attempt and modifying hh-related contents of the other (retained) household members that are in the same household as averted infections
+          removed_index_2nd_chance <- which(secondary_infection_retained_2nd_chance == 0) # which secondary infections are averted by ring-vaccination second attempt and need to be removed
+          removed_id_2nd_chance <- secondary_infection_ids[removed_index_2nd_chance]      # id of secondary infections averted by ring-vaccination second attempt and which need to be removed
 
-            # CFWNOTE: really need to check this is behaving as it should, especially w.r.t to the list modification at the end of this segment
-            for (i in 1:length(removed_index_2nd_chance)) {
+          if (sum(removed_id_2nd_chance) != 0) { # only do this if infections are being removed by 2nd chance ring vax
 
-              ## Modifying the cumulative number of household infections recorded
+            ## Looping through each of the removed infections, finding other infections that share their household, and modifying their info
+            ## to reflectremoval of this infection
+            for (i in 1:length(removed_index_2nd_chance)) { # CFWNOTE: Need to check this is behaving as it should, especially w.r.t to the list modification at the end of this segment
+
+              ## Modifying the cumulative number of household infections recorded for other household infections of this removed infection
               removed_temp_id <- removed_id_2nd_chance[i]
               removed_temp_hh_id <- tdf$hh_id[tdf$id == removed_temp_id]
               tdf$hh_infections[tdf$hh_id == removed_temp_hh_id] <- tdf$hh_infections[tdf$hh_id == removed_temp_hh_id] - 1 # removing this particular averted infection from the tally of total infected in the household
 
-              ## Modifying the list of the ids of all infected household members
+              ## Modifying the list of the ids of all infected household members of this removed infection
+              current_hh_infected_index <- unlist(tdf$hh_infected_index[tdf$hh_id == removed_temp_hh_id][1]) # [1] is there because there will potentially be multiple hh members in tdf, all of whom will have the same hh_infected_index so only first is needed here (esp. as all are being overwritten below)
               removed_temp_hh_infected_index <- tdf$hh_member_index[tdf$id == removed_temp_id]
-              removed_temp_hh_infected_index_for_removal <- which(unlist(tdf$hh_infected_index[tdf$hh_id == removed_temp_hh_id]) == removed_temp_hh_infected_index)
-              current_hh_infected_index <- unlist(tdf$hh_infected_index[tdf$hh_id == removed_temp_hh_id])
+              removed_temp_hh_infected_index_for_removal <- which(current_hh_infected_index == removed_temp_hh_infected_index)
               updated_hh_infected_index <- current_hh_infected_index[-removed_temp_hh_infected_index_for_removal]
-              tdf$hh_infected_index[tdf$hh_id == removed_temp_hh_id] <- I(as.list(updated_hh_infected_index)) # removing this particular averted infection from the list of all infected members in the household
+              tdf$hh_infected_index[tdf$hh_id == removed_temp_hh_id] <- I(as.list(updated_hh_infected_index)) # removing this particular averted infection from the list of all infected members in the household and updating the remaining household members' entries
 
             }
 
-            tdf <- tdf[!(tdf$id %in% removed_id_2nd_chance), ]                            # removing all of these secondary infections from the main dataframe
+            # Removing the secondary infections averted by their 2nd chance of ring vaccination from the main dataframe
+            tdf <- tdf[!(tdf$id %in% removed_id_2nd_chance), ]
           }
 
           ## Calculating the updated information for those infections vaccinated but NOT averted in this second attempt
@@ -739,6 +738,10 @@ basic_ring_vaccination_sim <- function(## Sexual Transmission Parameters
       }
 
     }
+
+    ########################
+    #### GOT TO HERE
+    ########################
 
     ##########################################################################################################################
     # Generating tertiary infections for each of the secondary infections
