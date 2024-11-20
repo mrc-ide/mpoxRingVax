@@ -300,7 +300,7 @@ basic_ring_vaccination_sim <- function(## Sexual Transmission Parameters
                                                      index_hh_size = index_hh_size,
                                                      index_hh_prior_infections = index_hh_infections,
                                                      index_hh_ages = index_hh_ages,
-                                                     index_hh_occupations = index_occupation,
+                                                     index_hh_occupations = index_hh_occupations,
 
                                                      mn_offspring_community = mn_offspring_community,
                                                      disp_offspring_community = disp_offspring_community,
@@ -681,6 +681,7 @@ basic_ring_vaccination_sim <- function(## Sexual Transmission Parameters
 
         current_max_row <- max(which(!is.na(tdf$time_infection_absolute)))  # total number of infections in the dataframe currently (so we can figure out how to label the new infections)
         current_max_id <- tdf$id[current_max_row]
+        current_max_hh_id <- max(tdf$hh_id)
 
         ## For the index infection being considered, getting the timings of the earliest/oldest secondary infection that we haven't yet generated tertiary infections for
         secondary_time_infection <- tdf$time_infection_absolute[which(tdf$parent == index_id)][i]                                   # timing of the secondary infections of the index infection being considered
@@ -698,6 +699,17 @@ basic_ring_vaccination_sim <- function(## Sexual Transmission Parameters
         secondary_quarantine <- rbinom(n = 1, size = 1, prob = prob_quarantine)                                                     # whether or not this secondary infection quarantines
         secondary_time_quarantine <- ifelse(secondary_quarantine == 1, onset_to_quarantine(n = 1), NA)                              # if they quarantine, when do they quarantine (how long after symptom onset)
 
+        ## new stuff added here
+        secondary_occupation <- tdf$occupation[secondary_idx]                                                                    # occupation of the secondary infection (SW, PBS or genPop)
+        secondary_age_group <- tdf$age[secondary_idx]                                                                            # age-group of the secondary infection (0-5, 5-18 or 18+)
+        secondary_hh_id <- tdf$hh_id[secondary_idx]                                                                              # household ID of the secondary infection
+        secondary_hh_member_index <- tdf$hh_member_index[secondary_idx]                                                          # house member ID for each household (used to subset the ages and occupations vectors for each household)
+        secondary_hh_size <- unlist(tdf$hh_size[secondary_idx])                                                                  # household size
+        secondary_hh_ages <- unlist(tdf$hh_ages[secondary_idx])                                                                  # ages of all of the household members
+        secondary_hh_occupations <- tdf$hh_occupations[secondary_idx]                                                            # occupations of all the household members
+        secondary_hh_infections <- tdf$hh_infections[secondary_idx]                                                              # cumulative number of infections there have been in this particular household (Note: need to make sure this is updated for the index case when we've simulated from them)
+        secondary_hh_infected_index <- unlist(tdf$hh_infected_index[secondary_idx])                                              # house member IDs of all infected household members
+
         ## Adding the onset times to this secondary infection's information in the dataframe
         tdf$time_onset_relative_parent[secondary_idx] <- secondary_onset_time
         secondary_onset_time_absolute <- secondary_onset_time + secondary_time_infection
@@ -713,15 +725,46 @@ basic_ring_vaccination_sim <- function(## Sexual Transmission Parameters
         #         the offspring of the index's offspring). But relative to the secondary infections (i.e. the index's
         #         offspring), they are themselves secondary offspring.
         ###################################################################################################################
-        secondary_n_offspring <- offspring_fun(1, susc)            # number of offspring this particular secondary infection produces
+        secondary_offspring_function_draw <- offspring_fun(synthetic_household_df = synthetic_household_df,
+                                                           index_age_group = secondary_age_group,
+                                                           index_hh_id = secondary_hh_id,
+                                                           index_occupation = secondary_occupation,
+                                                           max_hh_id = current_max_hh_id,
+
+                                                           mn_offspring_sexual_SW = mn_offspring_sexual_SW,
+                                                           disp_offspring_sexual_SW = disp_offspring_sexual_SW,
+                                                           mn_offspring_sexual_PBS = mn_offspring_sexual_PBS,
+                                                           disp_offspring_sexual_PBS = disp_offspring_sexual_PBS,
+                                                           mn_offspring_sexual_genPop = mn_offspring_sexual_genPop,
+                                                           disp_offspring_sexual_genPop = disp_offspring_sexual_genPop,
+                                                           sexual_transmission_occupation_matrix = sexual_transmission_occupation_matrix,
+
+                                                           mn_offspring_hh = mn_offspring_hh,
+                                                           disp_offspring_hh = disp_offspring_hh,
+                                                           index_hh_member_index = secondary_hh_member_index,
+                                                           index_hh_infections_index = secondary_hh_infected_index,
+                                                           index_hh_size = secondary_hh_size,
+                                                           index_hh_prior_infections = secondary_hh_infections,
+                                                           index_hh_ages = secondary_hh_ages,
+                                                           index_hh_occupations = secondary_hh_occupations,
+
+                                                           mn_offspring_community = mn_offspring_community,
+                                                           disp_offspring_community = disp_offspring_community,
+                                                           number_susceptible_community = susc,
+                                                           population_community = population,
+                                                           community_transmission_age_matrix = community_transmission_age_matrix)
+
+        secondary_n_offspring <- secondary_offspring_function_draw$total_offspring
         tdf$n_offspring[secondary_idx] <- secondary_n_offspring
+        tdf$secondary_offspring_generated[secondary_idx] <- TRUE
+
+        ##### then doing vaccination (still need to do this)
         if (secondary_vaccinated == 1) {
           if (secondary_time_protected < secondary_time_infection) {
             secondary_n_offspring <- sum(rbinom(n = secondary_n_offspring, size = 1, prob = 1 - vaccine_efficacy_transmission))
           }
         }
         tdf$n_offspring_new[secondary_idx] <- secondary_n_offspring
-        tdf$secondary_offspring_generated[secondary_idx] <- TRUE
         tertiary_infection_times <- generation_time(secondary_n_offspring)
 
         ################################################################################################################################################################
