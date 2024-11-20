@@ -589,11 +589,29 @@ basic_ring_vaccination_sim <- function(## Sexual Transmission Parameters
           index_pruned_n_offspring <- sum(secondary_infection_retained_2nd_chance)
           tdf$n_offspring_post_pruning_2nd_chance[tdf$id == index_id & !is.na(tdf$parent)] <- index_pruned_n_offspring
 
-          ## Removing the infections averted in this second ring vaccination attempt
+          ## Removing the infections averted in this second ring vaccination attempt and modifying hh-related contents of household members of averted infections
           removed_index_2nd_chance <- which(secondary_infection_retained_2nd_chance == 0) # which secondary infections are averted by ring-vaccination second attempt
           removed_id_2nd_chance <- secondary_infection_ids[removed_index_2nd_chance]      # id of secondary infections averted by ring-vaccination second attempt
           if (sum(removed_id_2nd_chance) != 0) {
-            tdf <- tdf[!(tdf$id %in% removed_id_2nd_chance), ]                            # removing these secondary infections from the main dataframe
+
+            # CFWNOTE: really need to check this is behaving as it should, especially w.r.t to the list modification at the end of this segment
+            for (i in 1:length(removed_index_2nd_chance)) {
+
+              ## Modifying the cumulative number of household infections recorded
+              removed_temp_id <- removed_id_2nd_chance[i]
+              removed_temp_hh_id <- tdf$hh_id[tdf$id == removed_temp_id]
+              tdf$hh_infections[tdf$hh_id == removed_temp_hh_id] <- tdf$hh_infections[tdf$hh_id == removed_temp_hh_id] - 1 # removing this particular averted infection from the tally of total infected in the household
+
+              ## Modifying the list of the ids of all infected household members
+              removed_temp_hh_infected_index <- tdf$hh_member_index[tdf$id == removed_temp_id]
+              removed_temp_hh_infected_index_for_removal <- which(unlist(tdf$hh_infected_index[tdf$hh_id == removed_temp_hh_id]) == removed_temp_hh_infected_index)
+              current_hh_infected_index <- unlist(tdf$hh_infected_index[tdf$hh_id == removed_temp_hh_id])
+              updated_hh_infected_index <- current_hh_infected_index[-removed_temp_hh_infected_index_for_removal]
+              tdf$hh_infected_index[tdf$hh_id == removed_temp_hh_id] <- I(as.list(updated_hh_infected_index)) # removing this particular averted infection from the list of all infected members in the household
+
+            }
+
+            tdf <- tdf[!(tdf$id %in% removed_id_2nd_chance), ]                            # removing all of these secondary infections from the main dataframe
           }
 
           ## Calculating the updated information for those infections vaccinated but NOT averted in this second attempt
