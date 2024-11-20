@@ -673,8 +673,8 @@ basic_ring_vaccination_sim <- function(## Sexual Transmission Parameters
 
           if (sum(removed_id_2nd_chance) != 0) { # only do this if infections are being removed by 2nd chance ring vax
 
-            ## Looping through each of the removed infections, finding other infections that share their household, and modifying their info
-            ## to reflectremoval of this infection
+            ## Looping through each of the removed infections, finding other infections that share their household, and modifying these infections' info
+            ## to reflect removal of this infection
             for (i in 1:length(removed_index_2nd_chance)) { # CFWNOTE: Need to check this is behaving as it should, especially w.r.t to the list modification at the end of this segment
 
               ## Modifying the cumulative number of household infections recorded for other household infections of this removed infection
