@@ -115,6 +115,7 @@ offspring_fun <- function(synthetic_household_df,                    # dataframe
                                                       hh_occupations = numeric(0),
                                                       hh_infections = numeric(0),
                                                       hh_infected_index = numeric(0))
+    offspring_sexual_new_hh_id <- max_hh_id
   }
 
   #########################################################################################################################################
@@ -131,6 +132,8 @@ offspring_fun <- function(synthetic_household_df,                    # dataframe
   new_mn_hh <- mn_offspring_hh * number_susceptible_hh/index_hh_size           # mean of household offspring distribution taking susceptible depletion into account
   num_offspring_hh <- min(c(rnbinom(n = 1, mu = new_mn_hh, size = disp_offspring_hh), number_susceptible_hh)) # number of household offspring, capped at number of individuals who can still be infected in the household
   ## note that we're not modifying overdispersion for susceptible depletion - we probably need to, but unclear if the way in the main function is correct - NEED TO CHECK!!!
+
+  index_hh_ages <- as.character(index_hh_ages)
 
   ## If household offspring are generated, create them and imbue them with all the required characteristics
   if (num_offspring_hh > 0) {

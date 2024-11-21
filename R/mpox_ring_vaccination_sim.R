@@ -28,6 +28,7 @@
 ## - Ability to specify whether vaccine coverage is due to being missed by health system (in which case 2nd attempt might work) or due to hesitancy/refusal (in which case 2nd attemtp won't work)
 ##
 #########################################################################################################################################################################################################
+source("R/mpox_ring_vaccination_offspring_function.R")
 seed <- 120
 population <- 10^6
 initial_immune <- 0
@@ -491,10 +492,10 @@ basic_ring_vaccination_sim <- function(## Sexual Transmission Parameters
           tdf[(current_max_row+1):(current_max_row+index_n_offspring), "hh_id"] <- index_offspring_function_draw$offspring_characteristics$hh_id
           tdf[(current_max_row+1):(current_max_row+index_n_offspring), "hh_member_index"] <- index_offspring_function_draw$offspring_characteristics$hh_member_index
           tdf[(current_max_row+1):(current_max_row+index_n_offspring), "hh_size"] <- index_offspring_function_draw$offspring_characteristics$hh_size
-          tdf[(current_max_row+1):(current_max_row+index_n_offspring), "hh_ages"] <- I(index_offspring_function_draw$offspring_characteristics$hh_ages)
-          tdf[(current_max_row+1):(current_max_row+index_n_offspring), "hh_occupations"] <- I(index_offspring_function_draw$offspring_characteristics$hh_occupations)
+          tdf[(current_max_row+1):(current_max_row+index_n_offspring), "hh_ages"] <- list(index_offspring_function_draw$offspring_characteristics$hh_ages)
+          tdf[(current_max_row+1):(current_max_row+index_n_offspring), "hh_occupations"] <- list(index_offspring_function_draw$offspring_characteristics$hh_occupations)
           tdf[(current_max_row+1):(current_max_row+index_n_offspring), "hh_infections"] <- index_offspring_function_draw$offspring_characteristics$hh_infections
-          tdf[(current_max_row+1):(current_max_row+index_n_offspring), "hh_infected_index"] <- I(as.list(index_offspring_function_draw$offspring_characteristics$hh_infected_index))
+          tdf[(current_max_row+1):(current_max_row+index_n_offspring), "hh_infected_index"] <- list(index_offspring_function_draw$offspring_characteristics$hh_infected_index)
 
           # No ring vaccination so index_pruned_n_offspring is same as index_n_offspring
           index_pruned_n_offspring <- index_n_offspring # number of secondary infections after accounting for vaccination's effect on transmission in breakthrough infections AND quarantine AND ring vaccination (which doesn't occur in this case)
@@ -605,10 +606,10 @@ basic_ring_vaccination_sim <- function(## Sexual Transmission Parameters
             tdf[(current_max_row+1):(current_max_row+index_pruned_n_offspring), "hh_id"] <- index_offspring_function_draw$offspring_characteristics$hh_id
             tdf[(current_max_row+1):(current_max_row+index_pruned_n_offspring), "hh_member_index"] <- index_offspring_function_draw$offspring_characteristics$hh_member_index
             tdf[(current_max_row+1):(current_max_row+index_pruned_n_offspring), "hh_size"] <- index_offspring_function_draw$offspring_characteristics$hh_size
-            tdf[(current_max_row+1):(current_max_row+index_pruned_n_offspring), "hh_ages"] <- I(index_offspring_function_draw$offspring_characteristics$hh_ages)
-            tdf[(current_max_row+1):(current_max_row+index_pruned_n_offspring), "hh_occupations"] <- I(index_offspring_function_draw$offspring_characteristics$hh_occupations)
+            tdf[(current_max_row+1):(current_max_row+index_pruned_n_offspring), "hh_ages"] <- list(index_offspring_function_draw$offspring_characteristics$hh_ages)
+            tdf[(current_max_row+1):(current_max_row+index_pruned_n_offspring), "hh_occupations"] <- list(index_offspring_function_draw$offspring_characteristics$hh_occupations)
             tdf[(current_max_row+1):(current_max_row+index_pruned_n_offspring), "hh_infections"] <- index_offspring_function_draw$offspring_characteristics$hh_infections
-            tdf[(current_max_row+1):(current_max_row+index_pruned_n_offspring), "hh_infected_index"] <- I(as.list(index_offspring_function_draw$offspring_characteristics$hh_infected_index))
+            tdf[(current_max_row+1):(current_max_row+index_pruned_n_offspring), "hh_infected_index"] <- list(index_offspring_function_draw$offspring_characteristics$hh_infected_index)
 
           }
         }
@@ -708,18 +709,28 @@ basic_ring_vaccination_sim <- function(## Sexual Transmission Parameters
             ## to reflect removal of this infection
             for (i in 1:length(removed_index_2nd_chance)) { # CFWNOTE: Need to check this is behaving as it should, especially w.r.t to the list modification at the end of this segment
 
-              ## Modifying the cumulative number of household infections recorded for other household infections of this removed infection
-              removed_temp_id <- removed_id_2nd_chance[i]
+              ## Getting the id of all hh members of that particular household
+              removed_temp_id <- removed_id_2nd_chance[i]                           # id of the hh member we're removing
               removed_temp_hh_id <- tdf$hh_id[tdf$id == removed_temp_id]
-              tdf$hh_infections[tdf$hh_id == removed_temp_hh_id] <- tdf$hh_infections[tdf$hh_id == removed_temp_hh_id] - 1 # removing this particular averted infection from the tally of total infected in the household
+              removed_temp_id_hh_members <- tdf$id[tdf$hh_id == removed_temp_hh_id] # ids of the other hh members with that hh id in the dataframe
+              removed_temp_id_hh_members_excluding_removed <- removed_temp_id_hh_members[-(removed_temp_id_hh_members %in% removed_temp_id)]
 
-              ## Modifying the list of the ids of all infected household members of this removed infection
-              current_hh_infected_index <- unlist(tdf$hh_infected_index[tdf$hh_id == removed_temp_hh_id][1]) # [1] is there because there will potentially be multiple hh members in tdf, all of whom will have the same hh_infected_index so only first is needed here (esp. as all are being overwritten below)
-              removed_temp_hh_infected_index <- tdf$hh_member_index[tdf$id == removed_temp_id]
-              removed_temp_hh_infected_index_for_removal <- which(current_hh_infected_index == removed_temp_hh_infected_index)
-              updated_hh_infected_index <- current_hh_infected_index[-removed_temp_hh_infected_index_for_removal]
-              tdf$hh_infected_index[tdf$hh_id == removed_temp_hh_id] <- I(as.list(updated_hh_infected_index)) # removing this particular averted infection from the list of all infected members in the household and updating the remaining household members' entries
+              ## Only do the modifications if OTHER hh members for that hh id exist (if the one to be removed is singular member of generated hh, no modifications are required other than their removal)
+              if (length(removed_temp_hh_id_num_members) > 1) {
 
+                ## Modifying the cumulative number of household infections recorded for other household infections of this removed infection
+                tdf$hh_infections[tdf$hh_id == removed_temp_hh_id] <- tdf$hh_infections[tdf$id %in% removed_temp_id_hh_members_excluding_removed] - 1 # removing this particular averted infection from the tally of total infected in the household
+
+                ## Modifying the list of the ids of all infected household members of this removed infection
+                current_hh_infected_index <- unlist(tdf$hh_infected_index[tdf$id %in% removed_temp_id_hh_members_excluding_removed][1]) # [1] is there because there will potentially be multiple hh members in tdf, all of whom will have the same hh_infected_index so only first is needed here (esp. as all are being overwritten below)
+                removed_temp_hh_infected_index <- tdf$hh_member_index[tdf$id == removed_temp_id]
+                removed_temp_hh_infected_index_for_removal <- which(current_hh_infected_index == removed_temp_hh_infected_index)
+                updated_hh_infected_index <- current_hh_infected_index[-removed_temp_hh_infected_index_for_removal]
+                tdf$hh_infected_index[tdf$id %in% removed_temp_id_hh_members_excluding_removed] <- I(as.list(updated_hh_infected_index)) # removing this particular averted infection from the list of all infected members in the household and updating the remaining household members' entries
+
+              }
+              print("got to here")
+              ### STILL NEED TO GO BACK THROUGH AND CHECK THIS PROPERLY
             }
 
             # Removing the secondary infections averted by their 2nd chance of ring vaccination from the main dataframe
@@ -778,6 +789,8 @@ basic_ring_vaccination_sim <- function(## Sexual Transmission Parameters
     #         simulate them here, establish whether or not they're successfully vaccinated, and prune the transmission tree
     #         as appropriate
     ##########################################################################################################################
+
+    print("got to tertiary")
 
     ############################################################################################
     # Generate tertiary offspring if there are secondary offspring to generate them
@@ -880,7 +893,7 @@ basic_ring_vaccination_sim <- function(## Sexual Transmission Parameters
             secondary_offspring_retained_index <- rbinom(n = secondary_n_offspring, size = 1, prob = 1 - vaccine_efficacy_transmission)
 
             ## Subsetting secondary_offspring_function_draw to get the infections that don't occur because of the reduced transmissibility of breakthrough infections
-            secondary_offspring_vaccine_averted_index <- which(secondary_offspring_vaccine_retained == 0)
+            secondary_offspring_vaccine_averted_index <- which(secondary_offspring_retained_index == 0)
             secondary_offspring_vaccine_averted_transmission_route <- secondary_offspring_function_draw$offspring_characteristics$transmission_route[secondary_offspring_vaccine_averted_index]
             secondary_offspring_vaccine_averted_hh_member_index <- secondary_offspring_function_draw$offspring_characteristics$hh_member_index[secondary_offspring_vaccine_averted_index]
 
@@ -1011,10 +1024,10 @@ basic_ring_vaccination_sim <- function(## Sexual Transmission Parameters
             tdf[(current_max_row+1):(current_max_row+secondary_n_offspring), "hh_id"] <- secondary_offspring_function_draw$offspring_characteristics$hh_id
             tdf[(current_max_row+1):(current_max_row+secondary_n_offspring), "hh_member_index"] <- secondary_offspring_function_draw$offspring_characteristics$hh_member_index
             tdf[(current_max_row+1):(current_max_row+secondary_n_offspring), "hh_size"] <- secondary_offspring_function_draw$offspring_characteristics$hh_size
-            tdf[(current_max_row+1):(current_max_row+secondary_n_offspring), "hh_ages"] <- I(secondary_offspring_function_draw$offspring_characteristics$hh_ages)
-            tdf[(current_max_row+1):(current_max_row+secondary_n_offspring), "hh_occupations"] <- I(secondary_offspring_function_draw$offspring_characteristics$hh_occupations)
+            tdf[(current_max_row+1):(current_max_row+secondary_n_offspring), "hh_ages"] <- list(secondary_offspring_function_draw$offspring_characteristics$hh_ages)
+            tdf[(current_max_row+1):(current_max_row+secondary_n_offspring), "hh_occupations"] <- list(secondary_offspring_function_draw$offspring_characteristics$hh_occupations)
             tdf[(current_max_row+1):(current_max_row+secondary_n_offspring), "hh_infections"] <- secondary_offspring_function_draw$offspring_characteristics$hh_infections
-            tdf[(current_max_row+1):(current_max_row+secondary_n_offspring), "hh_infected_index"] <- I(as.list(secondary_offspring_function_draw$offspring_characteristics$hh_infected_index))
+            tdf[(current_max_row+1):(current_max_row+secondary_n_offspring), "hh_infected_index"] <- list(secondary_offspring_function_draw$offspring_characteristics$hh_infected_index)
 
             # No ring vaccination so n_offspring_post_pruning is same as secondary_n_offspring
             tdf$n_offspring_post_pruning[secondary_idx] <- secondary_n_offspring
@@ -1070,7 +1083,7 @@ basic_ring_vaccination_sim <- function(## Sexual Transmission Parameters
             secondary_offspring_function_draw$offspring_characteristics <- secondary_offspring_function_draw$offspring_characteristics[retained_index, ]
             secondary_offspring_function_draw$total_offspring <- length(retained_index)
             secondary_offspring_function_draw$num_offspring_sexual <- sum(secondary_offspring_function_draw$offspring_characteristics$transmission_route == "sexual")
-            secondary_offspring_function_draw$num_offspring_hh <- sum(secondaryoffspring_function_draw$offspring_characteristics$transmission_route == "household")
+            secondary_offspring_function_draw$num_offspring_hh <- sum(secondary_offspring_function_draw$offspring_characteristics$transmission_route == "household")
             secondary_offspring_function_draw$num_offspring_community <- sum(secondary_offspring_function_draw$offspring_characteristics$transmission_route == "community")
 
             ## If any of the averted infections are household ones, update the info of any remaining household infections there
@@ -1119,6 +1132,16 @@ basic_ring_vaccination_sim <- function(## Sexual Transmission Parameters
               tdf[(current_max_row+1):(current_max_row+secondary_pruned_n_offspring), "n_offspring_post_pruning_2nd_chance"] <- NA
               tdf[(current_max_row+1):(current_max_row+secondary_pruned_n_offspring), "secondary_offspring_generated"] <- FALSE
               tdf[(current_max_row+1):(current_max_row+secondary_pruned_n_offspring), "tertiary_offspring_generated"] <- FALSE
+              tdf[(current_max_row+1):(current_max_row+secondary_pruned_n_offspring), "transmission_route"] <- secondary_offspring_function_draw$offspring_characteristics$transmission_route
+              tdf[(current_max_row+1):(current_max_row+secondary_pruned_n_offspring), "occupation"] <- secondary_offspring_function_draw$offspring_characteristics$occupation
+              tdf[(current_max_row+1):(current_max_row+secondary_pruned_n_offspring), "age"] <- secondary_offspring_function_draw$offspring_characteristics$age
+              tdf[(current_max_row+1):(current_max_row+secondary_pruned_n_offspring), "hh_id"] <- secondary_offspring_function_draw$offspring_characteristics$hh_id
+              tdf[(current_max_row+1):(current_max_row+secondary_pruned_n_offspring), "hh_member_index"] <- secondary_offspring_function_draw$offspring_characteristics$hh_member_index
+              tdf[(current_max_row+1):(current_max_row+secondary_pruned_n_offspring), "hh_size"] <- secondary_offspring_function_draw$offspring_characteristics$hh_size
+              tdf[(current_max_row+1):(current_max_row+secondary_pruned_n_offspring), "hh_ages"] <- list(secondary_offspring_function_draw$offspring_characteristics$hh_ages)
+              tdf[(current_max_row+1):(current_max_row+secondary_pruned_n_offspring), "hh_occupations"] <- list(secondary_offspring_function_draw$offspring_characteristics$hh_occupations)
+              tdf[(current_max_row+1):(current_max_row+secondary_pruned_n_offspring), "hh_infections"] <- secondary_offspring_function_draw$offspring_characteristics$hh_infections
+              tdf[(current_max_row+1):(current_max_row+secondary_pruned_n_offspring), "hh_infected_index"] <- list(secondary_offspring_function_draw$offspring_characteristics$hh_infected_index)
             }
           }
 
