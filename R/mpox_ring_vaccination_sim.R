@@ -344,6 +344,7 @@ basic_ring_vaccination_sim <- function(## Sexual Transmission Parameters
                                                      number_susceptible_community = susc,
                                                      population_community = population,
                                                      community_transmission_age_matrix = community_transmission_age_matrix)
+      print("secondary gen done")
 
       index_n_offspring <- index_offspring_function_draw$total_offspring
       tdf$n_offspring[index_idx] <- index_n_offspring
@@ -702,35 +703,48 @@ basic_ring_vaccination_sim <- function(## Sexual Transmission Parameters
           ## Removing the infections averted in this second ring vaccination attempt and modifying hh-related contents of the other (retained) household members that are in the same household as averted infections
           removed_index_2nd_chance <- which(secondary_infection_retained_2nd_chance == 0) # which secondary infections are averted by ring-vaccination second attempt and need to be removed
           removed_id_2nd_chance <- secondary_infection_ids[removed_index_2nd_chance]      # id of secondary infections averted by ring-vaccination second attempt and which need to be removed
+          removed_hh_id_2nd_chance <- tdf$hh_id[tdf$id %in% removed_id_2nd_chance]        # hh id of secondary infections averted by ring-vaccination second attempt and which need to be removed
+
+          ### need to do this at the household level, not the individual level I think??
+          ### or actually, is what's happening here that it's only being applied to one member of the household?
+          ### I need to be doing this at the household level - do this next!!!
+
+          if(index_id == 10) {
+            stop("error throwing time")
+          }
 
           if (sum(removed_id_2nd_chance) != 0) { # only do this if infections are being removed by 2nd chance ring vax
 
             ## Looping through each of the removed infections, finding other infections that share their household, and modifying these infections' info
             ## to reflect removal of this infection
-            for (i in 1:length(removed_index_2nd_chance)) { # CFWNOTE: Need to check this is behaving as it should, especially w.r.t to the list modification at the end of this segment
+            for (i in 1:length(removed_hh_id_2nd_chance)) { # CFWNOTE: Need to check this is behaving as it should, especially w.r.t to the list modification at the end of this segment
 
               ## Getting the id of all hh members of that particular household
-              removed_temp_id <- removed_id_2nd_chance[i]                           # id of the hh member we're removing
-              removed_temp_hh_id <- tdf$hh_id[tdf$id == removed_temp_id]
-              removed_temp_id_hh_members <- tdf$id[tdf$hh_id == removed_temp_hh_id] # ids of the other hh members with that hh id in the dataframe
-              removed_temp_id_hh_members_excluding_removed <- removed_temp_id_hh_members[-(removed_temp_id_hh_members %in% removed_temp_id)]
+              removed_temp_hh_id <- removed_hh_id_2nd_chance[i]
+              removed_temp_id <- removed_id_2nd_chance[removed_hh_id_2nd_chance == removed_temp_hh_id]   # id of the hh member(s) we're removing
+              removed_temp_id_hh_members <- tdf$id[tdf$hh_id == removed_temp_hh_id]                      # ids of the other hh members with that hh id in the dataframe
+              removed_temp_id_hh_members_excluding_removed <- removed_temp_id_hh_members[!(removed_temp_id_hh_members %in% removed_temp_id)]
+              ### CFWNOTE - wherever else I've done the minus thing, replace with the exclamation point thing
 
-              ## Only do the modifications if OTHER hh members for that hh id exist (if the one to be removed is singular member of generated hh, no modifications are required other than their removal)
-              if (length(removed_temp_hh_id_num_members) > 1) {
+              ## Only do the modifications if OTHER hh members for that hh id will exist after removal (if the hh member(s) to be removed is/are the entire hh, no modifications are required other than their removal)
+              if (length(removed_temp_id_hh_members_excluding_removed) > 1) {
 
-                ## Modifying the cumulative number of household infections recorded for other household infections of this removed infection
-                tdf$hh_infections[tdf$hh_id == removed_temp_hh_id] <- tdf$hh_infections[tdf$id %in% removed_temp_id_hh_members_excluding_removed] - 1 # removing this particular averted infection from the tally of total infected in the household
+                if (length(unique(tdf$hh_infections[tdf$id %in% removed_temp_id_hh_members_excluding_removed])) != 1) {
+                  stop("something wrong with household size and cumulative infections differing across individuals in the same household")
+                }
+
+                ## Modifying the cumulative number of household infections recorded for other household infections of this removed infectio
+                tdf$hh_infections[tdf$id %in% removed_temp_id_hh_members_excluding_removed] <- tdf$hh_infections[tdf$id %in% removed_temp_id_hh_members_excluding_removed] - 1 # removing this particular averted infection from the tally of total infected in the household
 
                 ## Modifying the list of the ids of all infected household members of this removed infection
                 current_hh_infected_index <- unlist(tdf$hh_infected_index[tdf$id %in% removed_temp_id_hh_members_excluding_removed][1]) # [1] is there because there will potentially be multiple hh members in tdf, all of whom will have the same hh_infected_index so only first is needed here (esp. as all are being overwritten below)
                 removed_temp_hh_infected_index <- tdf$hh_member_index[tdf$id == removed_temp_id]
                 removed_temp_hh_infected_index_for_removal <- which(current_hh_infected_index == removed_temp_hh_infected_index)
                 updated_hh_infected_index <- current_hh_infected_index[-removed_temp_hh_infected_index_for_removal]
-                tdf$hh_infected_index[tdf$id %in% removed_temp_id_hh_members_excluding_removed] <- I(as.list(updated_hh_infected_index)) # removing this particular averted infection from the list of all infected members in the household and updating the remaining household members' entries
+                tdf$hh_infected_index[tdf$id %in% removed_temp_id_hh_members_excluding_removed] <- list(updated_hh_infected_index) # removing this particular averted infection from the list of all infected members in the household and updating the remaining household members' entries
 
               }
-              print("got to here")
-              ### STILL NEED TO GO BACK THROUGH AND CHECK THIS PROPERLY
+
             }
 
             # Removing the secondary infections averted by their 2nd chance of ring vaccination from the main dataframe
@@ -789,8 +803,6 @@ basic_ring_vaccination_sim <- function(## Sexual Transmission Parameters
     #         simulate them here, establish whether or not they're successfully vaccinated, and prune the transmission tree
     #         as appropriate
     ##########################################################################################################################
-
-    print("got to tertiary")
 
     ############################################################################################
     # Generate tertiary offspring if there are secondary offspring to generate them
@@ -876,6 +888,7 @@ basic_ring_vaccination_sim <- function(## Sexual Transmission Parameters
                                                            number_susceptible_community = susc,
                                                            population_community = population,
                                                            community_transmission_age_matrix = community_transmission_age_matrix)
+        print("tertiary gen done")
 
         secondary_n_offspring <- secondary_offspring_function_draw$total_offspring
         tdf$n_offspring[secondary_idx] <- secondary_n_offspring
