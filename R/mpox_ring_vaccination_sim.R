@@ -268,6 +268,9 @@ basic_ring_vaccination_sim <- function(## Sexual Transmission Parameters
                                                               !is.na(tdf$time_infection_absolute)])                  # timing of the earliest unsimulated infection
     index_idx <- which(tdf$time_infection_absolute == index_time_infection & !tdf$tertiary_offspring_generated)[1]   # get the row of the earliest unsimulated infection
     index_id <- tdf$id[index_idx]                                                                                    # id of the earliest unsimulated infection
+    # if(index_id == 68) {
+    #   stop("error throwing time")
+    # }
     index_t <- tdf$time_infection_absolute[index_idx]                                                                # infection time of the earliest unsimulated infection
     index_gen <- tdf$generation[index_idx]                                                                           # generation of the earliest unsimulated infection
     index_vaccinated <- tdf$vaccinated[index_idx]                                                                    # whether or not the index case (the "parent") is vaccinated
@@ -704,42 +707,40 @@ basic_ring_vaccination_sim <- function(## Sexual Transmission Parameters
           removed_index_2nd_chance <- which(secondary_infection_retained_2nd_chance == 0) # which secondary infections are averted by ring-vaccination second attempt and need to be removed
           removed_id_2nd_chance <- secondary_infection_ids[removed_index_2nd_chance]      # id of secondary infections averted by ring-vaccination second attempt and which need to be removed
           removed_hh_id_2nd_chance <- tdf$hh_id[tdf$id %in% removed_id_2nd_chance]        # hh id of secondary infections averted by ring-vaccination second attempt and which need to be removed
+          removed_hh_id_2nd_chance_unique <- unique(removed_hh_id_2nd_chance)
 
-          ### need to do this at the household level, not the individual level I think??
-          ### or actually, is what's happening here that it's only being applied to one member of the household?
-          ### I need to be doing this at the household level - do this next!!!
-
-          if(index_id == 10) {
-            stop("error throwing time")
-          }
+          # if(index_id == 10) {
+          #   stop("error throwing time")
+          # }
 
           if (sum(removed_id_2nd_chance) != 0) { # only do this if infections are being removed by 2nd chance ring vax
 
-            ## Looping through each of the removed infections, finding other infections that share their household, and modifying these infections' info
+            ## Looping through each of the households with infections removed, finding other infections that share their household, and modifying these infections' info
             ## to reflect removal of this infection
-            for (i in 1:length(removed_hh_id_2nd_chance)) { # CFWNOTE: Need to check this is behaving as it should, especially w.r.t to the list modification at the end of this segment
+            for (i in 1:length(removed_hh_id_2nd_chance_unique)) { # CFWNOTE: Need to check this is behaving as it should, especially w.r.t to the list modification at the end of this segment
 
               ## Getting the id of all hh members of that particular household
-              removed_temp_hh_id <- removed_hh_id_2nd_chance[i]
+              removed_temp_hh_id <- removed_hh_id_2nd_chance_unique[i]
               removed_temp_id <- removed_id_2nd_chance[removed_hh_id_2nd_chance == removed_temp_hh_id]   # id of the hh member(s) we're removing
               removed_temp_id_hh_members <- tdf$id[tdf$hh_id == removed_temp_hh_id]                      # ids of the other hh members with that hh id in the dataframe
               removed_temp_id_hh_members_excluding_removed <- removed_temp_id_hh_members[!(removed_temp_id_hh_members %in% removed_temp_id)]
               ### CFWNOTE - wherever else I've done the minus thing, replace with the exclamation point thing
 
-              ## Only do the modifications if OTHER hh members for that hh id will exist after removal (if the hh member(s) to be removed is/are the entire hh, no modifications are required other than their removal)
-              if (length(removed_temp_id_hh_members_excluding_removed) > 1) {
+              ## If hh members are removed from a household with other infections already in it, modify the remaining hh members' info to reflect that
+              if (length(removed_temp_id) > 0 & length(removed_temp_id_hh_members_excluding_removed) > 0) {
 
                 if (length(unique(tdf$hh_infections[tdf$id %in% removed_temp_id_hh_members_excluding_removed])) != 1) {
                   stop("something wrong with household size and cumulative infections differing across individuals in the same household")
                 }
+                # print(index_id)
 
                 ## Modifying the cumulative number of household infections recorded for other household infections of this removed infectio
-                tdf$hh_infections[tdf$id %in% removed_temp_id_hh_members_excluding_removed] <- tdf$hh_infections[tdf$id %in% removed_temp_id_hh_members_excluding_removed] - 1 # removing this particular averted infection from the tally of total infected in the household
+                tdf$hh_infections[tdf$id %in% removed_temp_id_hh_members_excluding_removed] <- tdf$hh_infections[tdf$id %in% removed_temp_id_hh_members_excluding_removed] - length(removed_temp_id) # removing this particular averted infection from the tally of total infected in the household
 
                 ## Modifying the list of the ids of all infected household members of this removed infection
                 current_hh_infected_index <- unlist(tdf$hh_infected_index[tdf$id %in% removed_temp_id_hh_members_excluding_removed][1]) # [1] is there because there will potentially be multiple hh members in tdf, all of whom will have the same hh_infected_index so only first is needed here (esp. as all are being overwritten below)
-                removed_temp_hh_infected_index <- tdf$hh_member_index[tdf$id == removed_temp_id]
-                removed_temp_hh_infected_index_for_removal <- which(current_hh_infected_index == removed_temp_hh_infected_index)
+                removed_temp_hh_infected_index <- tdf$hh_member_index[tdf$id %in% removed_temp_id]
+                removed_temp_hh_infected_index_for_removal <- which(current_hh_infected_index %in% removed_temp_hh_infected_index)
                 updated_hh_infected_index <- current_hh_infected_index[-removed_temp_hh_infected_index_for_removal]
                 tdf$hh_infected_index[tdf$id %in% removed_temp_id_hh_members_excluding_removed] <- list(updated_hh_infected_index) # removing this particular averted infection from the list of all infected members in the household and updating the remaining household members' entries
 
@@ -923,7 +924,7 @@ basic_ring_vaccination_sim <- function(## Sexual Transmission Parameters
 
               ## Removing the averted household infections from the cumulative total
               secondary_offspring_num_household_infections_averted <- sum(secondary_offspring_vaccine_averted_transmission_route == "household")
-              secondary_offspring_function_draw$new_hh_cumulative_infections <- secondary_offspring_function_draw$new_hh_cumulative_infections - index_offspring_num_household_infections_averted
+              secondary_offspring_function_draw$new_hh_cumulative_infections <- secondary_offspring_function_draw$new_hh_cumulative_infections - secondary_offspring_num_household_infections_averted
               secondary_offspring_function_draw$offspring_characteristics$hh_infections[secondary_offspring_function_draw$offspring_characteristics$transmission_route == "household"] <- secondary_offspring_function_draw$new_hh_cumulative_infections
 
               ## Modifying the list of all ids of infected household members to account for the averted infections
