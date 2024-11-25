@@ -1,4 +1,6 @@
 source("R/mpox_ring_vaccination_offspring_function.R")
+source("R/mpox_ring_vaccination_sim.R")
+
 seed <- 120
 population <- 10^6
 initial_immune <- 0
