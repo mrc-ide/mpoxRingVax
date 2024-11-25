@@ -190,25 +190,25 @@ basic_ring_vaccination_sim <- function(## Sexual Transmission Parameters
     n_offspring_post_pruning_2nd_chance = integer(check_final_size),  # number of secondary infections after ring-vaccination second attempt
     secondary_offspring_generated = FALSE,                            # indicator tracking whether secondary infections have been generated for a particular infected individual
     tertiary_offspring_generated = FALSE,                             # indicator tracking whether tertiary infections have been generated for a particular infected individual
-    transmission_route = NA_character_,
-    occupation = NA_character_,
-    age = NA_character_,
-    hh_id = integer(check_final_size),
-    hh_member_index = integer(check_final_size),
-    hh_size = integer(check_final_size),
-    hh_ages = I(vector("list", check_final_size)),
-    hh_occupations = I(vector("list", check_final_size)),
-    hh_infections = NA_real_,
-    hh_infected_index = I(vector("list", check_final_size)),
+    transmission_route = NA_character_,                               # how the individual was infected - sexual, household or community
+    occupation = NA_character_,                                       # characteristic of the individual - sex worker (SW), person who buys sex (PBS) or general population (genPop)
+    age = NA_character_,                                              # age group of the individual (0-5, 5-18, 18+) - SW and PBS can only be 18+
+    hh_id = integer(check_final_size),                                # id of the household an individual resides in
+    hh_member_index = integer(check_final_size),                      # id number for each individual within a household
+    hh_size = integer(check_final_size),                              # size of the household
+    hh_ages = I(vector("list", check_final_size)),                    # ages of all the individuals in the household
+    hh_occupations = I(vector("list", check_final_size)),             # occupation of all the individuals in the household
+    hh_infections = NA_real_,                                         # total number of infections that have occurred in the household (note: this is dynamically updated)
+    hh_infected_index = I(vector("list", check_final_size)),          # id numbers of all individuals in the household who have been infected (note: this is dynamically updated)
     stringsAsFactors = FALSE)
 
   # Sampling the households for the initial seeding cases - we seed this epidemic in sex workers
-  sampled_rows <- synthetic_household_df[get("contains_SW") == 1][sample(.N, seeding_cases)]  # sampling from synthetic hh df a hh that contains a SW
-  seeding_case_occupations <- rep("SW", seeding_cases)
-  seeding_case_ages <- rep("18+", seeding_cases)
+  sampled_rows <- synthetic_household_df[get("contains_SW") == 1][sample(.N, seeding_cases)]  # sampling from our synthetic DRC age/occ/hh dataframe households that contains a SW
   seeding_case_indices <- unlist(lapply(sampled_rows$hh_occupations, function(occupations) {
     which(occupations == "SW")  # Find the indices where "SW" occurs
   }))
+  seeding_case_occupations <- rep("SW", seeding_cases)  ## initial seeding cases are assumed to be SWs
+  seeding_case_ages <- rep("18+", seeding_cases)        ## all SWs are assumed to be 18+
 
   # Initialize the dataframe with the seeding cases
   tdf[1:seeding_cases, ] <- data.frame(
