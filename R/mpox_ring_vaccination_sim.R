@@ -9,16 +9,6 @@
 #########################################################################################################################################################################################################
 
 #########################################################################################################################################################################################################
-## Notes (just jotting down thoughts/uncertainties and/or things to address as they come to mind)
-##
-##  Note #1: We use two rings for ring vaccination (i.e. contacts of the index case AND contacts of these contacts can get vaccinated) but we DON'T re-vaccinate people who have already
-##  been vaccinated and for whom vaccination fails to protect them. This can produce some weird behaviour - for example, imperfect coverage with a good vaccine is better than perfect coverage
-##  with a worse vaccine. Because in the latter, you vaccinate everyone first time around and they don't get another chance at being vaccinated if it fails. In the former, unvaccinated individuals
-##  get another chance at being vaccinated the second time around. Don't think this is necessarily a problem, but good to be aware of.
-##
-#########################################################################################################################################################################################################
-
-#########################################################################################################################################################################################################
 ## To Consider Building In:
 ##
 ## - Make prob_contact_traced a function of the number of active infections (or something that means it's time varying and related to the size of the epidemic)
@@ -240,6 +230,8 @@ mpox_ring_vaccination_sim <- function(## Sexual Transmission Parameters
   #
   ##########################################################################################################################################
 
+  ## While we haven't hit the simulation cap size (check_final_size) and any infections exist where we have not yet generated the requisite offspring, repeat
+  ## the loop described in the text above
   while ((any(is.na(tdf$n_offspring)) | any(tdf$n_offspring_post_pruning != 0 & tdf$secondary_offspring_generated == FALSE)) & nrow(tdf) <= check_final_size) {
 
     ## Get the total number of infections in the dataframe currently (so we can figure out how to label the new infections)
@@ -285,6 +277,7 @@ mpox_ring_vaccination_sim <- function(## Sexual Transmission Parameters
     time_to_contact_vaccination <- index_onset_time + vaccine_logistical_delay                                       # time between index case infected and contacts being ring vaccinated
     time_to_contact_vaccination_protection <- time_to_contact_vaccination + vaccine_protection_delay                 # time between index case infected and contacts being protected by the vaccination
 
+
     ##########################################################################################################################
     # Generating secondary infections from the index infection
     # - Note: If we've already generated the secondary offspring for this index infection (when they were a secondary
@@ -299,7 +292,7 @@ mpox_ring_vaccination_sim <- function(## Sexual Transmission Parameters
     if (index_secondary_offspring_generated == FALSE) {
 
       ##########################################################################################################
-      # Generating secondary infections and infection times, taking vaccination status of index into account
+      # Generating secondary infections for this index infection
       ##########################################################################################################
       index_offspring_function_draw <- offspring_fun(synthetic_household_df = synthetic_household_df,
                                                      index_age_group = index_age_group,
@@ -329,7 +322,6 @@ mpox_ring_vaccination_sim <- function(## Sexual Transmission Parameters
                                                      number_susceptible_community = susc,
                                                      population_community = population,
                                                      community_transmission_age_matrix = community_transmission_age_matrix)
-      print("secondary gen done")
 
       index_n_offspring <- index_offspring_function_draw$total_offspring
       tdf$n_offspring[index_idx] <- index_n_offspring
@@ -337,10 +329,11 @@ mpox_ring_vaccination_sim <- function(## Sexual Transmission Parameters
 
       ####################################################################################################################################
       # Removing secondary infections after taking vaccination's effect on transmission in breakthrough infections into account
-      #   CFWNote: Need to chec, when vaccine_efficacy_transmission is 1, does that introduce NAs that get passed through to next section
       ####################################################################################################################################
-      if (index_vaccinated == 1) { # Only do this if index infection was vaccinated
+      ## Only flow through this step if index infection was vaccinated and still infected (i.e. a breakthrough infection)
+      if (index_vaccinated == 1) {
 
+        ## Only do this step if the index's vaccination protection developed BEFORE they were infected (otherwise they wouldn't have any effect of vaccination)
         if (index_time_protected < index_time_infection) {
 
           ## Binomial draw to decide which infections are averted by the reduced transmissibility of the breakthrough infection
@@ -348,19 +341,25 @@ mpox_ring_vaccination_sim <- function(## Sexual Transmission Parameters
 
           ## Subsetting index_offspring_function_draw to get the infections that don't occur because of the reduced transmissibility of breakthrough infections
           index_offspring_vaccine_averted_index <- which(index_offspring_vaccine_retained == 0)
-          index_offspring_vaccine_averted_transmission_route <- index_offspring_function_draw$offspring_characteristics$transmission_route[index_offspring_vaccine_averted_index]
-          index_offspring_vaccine_averted_hh_member_index <- index_offspring_function_draw$offspring_characteristics$hh_member_index[index_offspring_vaccine_averted_index]
+          index_offspring_vaccine_averted_transmission_route <- index_offspring_function_draw$offspring_characteristics$transmission_route[index_offspring_vaccine_averted_index] # getting the transmisssion route of each of the averted infections
+          index_offspring_vaccine_averted_hh_member_index <- index_offspring_function_draw$offspring_characteristics$hh_member_index[index_offspring_vaccine_averted_index]       # getting the hh member ids of each of the averted infections
 
           ## Subsetting index_offspring_function_draw to reflect the averted infections because of reduced transmissibility of the breakthrough infection
           index_offspring_retained_index <- which(index_offspring_vaccine_retained == 1)
-          index_offspring_function_draw$offspring_characteristics <- index_offspring_function_draw$offspring_characteristics[index_offspring_retained_index, ]
-          index_offspring_function_draw$total_offspring <- length(index_offspring_retained_index)
-          index_offspring_function_draw$num_offspring_sexual <- sum(index_offspring_function_draw$offspring_characteristics$transmission_route == "sexual")
-          index_offspring_function_draw$num_offspring_hh <- sum(index_offspring_function_draw$offspring_characteristics$transmission_route == "household")
-          index_offspring_function_draw$num_offspring_community <- sum(index_offspring_function_draw$offspring_characteristics$transmission_route == "community")
 
-          ## If any of the averted infections are household ones, update the info of any remaining household infections there
-          if ("household" %in% index_offspring_vaccine_averted_transmission_route) {
+          ## Updating the offspring function draw index_offspring_function_draw to reflect loss of averted infections
+          index_offspring_function_draw$offspring_characteristics <- index_offspring_function_draw$offspring_characteristics[index_offspring_retained_index, ]    # subsetting the offspring dataframe to only retain the infections that weren't averted
+          index_offspring_function_draw$total_offspring <- length(index_offspring_retained_index)                                                                 # updating total number of offspring to reflect loss of averted infections
+          index_offspring_function_draw$num_offspring_sexual <- sum(index_offspring_function_draw$offspring_characteristics$transmission_route == "sexual")       # updating number of sexual infections to reflect loss of averted infections
+          index_offspring_function_draw$num_offspring_hh <- sum(index_offspring_function_draw$offspring_characteristics$transmission_route == "household")        # updating number of household infections to reflect loss of averted infections
+          index_offspring_function_draw$num_offspring_community <- sum(index_offspring_function_draw$offspring_characteristics$transmission_route == "community") # updating number of community infections to reflect loss averted infections
+
+          ## If any of the averted infections are household infections, we ALSO need to update the information of any infections who share their household
+          ## - Specifically, we need to update the cumulative household infections tracker and the index tracking which household members have been infected
+          ##   and remove the averted infections from both of these
+          ## - Note that because of the way the offspring function is set up, the "household" infections must all belong to the same household,
+          ##   which is the same household as the index infection
+          if ("household" %in% index_offspring_vaccine_averted_transmission_route) { # are any of the averted infections ones who got infected in a household?
 
             ## Removing the averted household infections from the cumulative total
             index_offspring_num_household_infections_averted <- sum(index_offspring_vaccine_averted_transmission_route == "household")
@@ -382,6 +381,8 @@ mpox_ring_vaccination_sim <- function(## Sexual Transmission Parameters
       }
       tdf$n_offspring_new[index_idx] <- index_n_offspring
       secondary_infection_times <- generation_time(index_n_offspring)
+
+      ### GOT TO HERE
 
       ###########################################################################################################################################################
       ## Removing any infections that are averted due to quarantining (assumed to occur index_quarantine_time after symptom onset, which is index_onset_time)
