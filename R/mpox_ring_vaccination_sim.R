@@ -28,129 +28,53 @@
 ## - Ability to specify whether vaccine coverage is due to being missed by health system (in which case 2nd attempt might work) or due to hesitancy/refusal (in which case 2nd attemtp won't work)
 ##
 #########################################################################################################################################################################################################
-source("R/mpox_ring_vaccination_offspring_function.R")
-seed <- 120
-population <- 10^6
-initial_immune <- 0
-check_final_size <- 10000
-load("data/south_kivu_final.rda")
-synthetic_household_df <- data.table::as.data.table(south_kivu_final)
-seeding_cases <- 5
-t0 <- 0
-infection_to_onset <- function(n) { rep(5, n) }
-prob_quarantine <- 0.4
-onset_to_quarantine <- function(n) { rep(2, n) }
-vaccine_logistical_delay <- 2
-vaccine_protection_delay <- 2
-mn_offspring_sexual_SW <- 5
-disp_offspring_sexual_SW <- 100
-mn_offspring_sexual_PBS <- 5
-disp_offspring_sexual_PBS <- 10
-mn_offspring_sexual_genPop <- 5
-disp_offspring_sexual_genPop <- 10
-sexual_transmission_occupation_matrix <- matrix(data = c(0.00, 0.10, 0.90,
-                                                         0.20, 0.10, 0.70,
-                                                         0.00, 0.90, 0.10), nrow = 3, ncol = 3, byrow = TRUE)
-mn_offspring_hh <- 7
-disp_offspring_hh <- 100
-mn_offspring_community <- 5
-disp_offspring_community <- 100
-community_transmission_age_matrix <- matrix(data = c(0.34, 0.33, 0.33,
-                                                     0.34, 0.33, 0.33,
-                                                     0.34, 0.33, 0.33), nrow = 3, ncol = 3, byrow = TRUE)
-vaccine_efficacy_transmission <- 0.5
-generation_time <- function(n) { rep(10, n)}
-vaccine_coverage <- 0.5
-vaccine_efficacy_infection <- 0.8
-prob_quarantine <- 0.8
-onset_to_quarantine <- function(n) { rep(0.1, n) }
-quarantine_efficacy_household <- 0.77
-quarantine_efficacy_else <- 0.6
-vaccine_start <- 0
-prop_asymptomatic <- 0.1
-
-x <- basic_ring_vaccination_sim(mn_offspring_sexual_SW = mn_offspring_sexual_SW,
-                                disp_offspring_sexual_SW = disp_offspring_sexual_SW,
-                                mn_offspring_sexual_PBS = mn_offspring_sexual_PBS,
-                                disp_offspring_sexual_PBS = disp_offspring_sexual_PBS,
-                                mn_offspring_sexual_genPop = mn_offspring_sexual_genPop,
-                                disp_offspring_sexual_genPop = disp_offspring_sexual_genPop,
-                                sexual_transmission_occupation_matrix = sexual_transmission_occupation_matrix,
-                                mn_offspring_hh = mn_offspring_hh,
-                                disp_offspring_hh = disp_offspring_hh,
-                                mn_offspring_community = mn_offspring_community,
-                                disp_offspring_community = disp_offspring_community,
-                                community_transmission_age_matrix = community_transmission_age_matrix,
-                                prop_asymptomatic = prop_asymptomatic,
-                                generation_time = generation_time,
-                                infection_to_onset = infection_to_onset,
-                                vaccine_start = vaccine_start,
-                                vaccine_coverage = vaccine_coverage,
-                                vaccine_efficacy_infection = vaccine_efficacy_infection,
-                                vaccine_efficacy_transmission = vaccine_efficacy_transmission,
-                                vaccine_logistical_delay = vaccine_logistical_delay,
-                                vaccine_protection_delay = vaccine_protection_delay,
-                                prob_quarantine = prob_quarantine,
-                                onset_to_quarantine = onset_to_quarantine,
-                                quarantine_efficacy_household = quarantine_efficacy_household,
-                                quarantine_efficacy_else = quarantine_efficacy_else,
-                                synthetic_household_df = synthetic_household_df,
-                                t0 = t0,
-                                population = population,
-                                check_final_size = check_final_size,
-                                initial_immune = initial_immune,
-                                seeding_cases = seeding_cases,
-                                seed = seed)
-
-
-
 #' @export
-basic_ring_vaccination_sim <- function(## Sexual Transmission Parameters
-                                       mn_offspring_sexual_SW,                 # mean of the sexual offspring distribution for SW
-                                       disp_offspring_sexual_SW,               # overdispersion of the sexual offspring distribution for SW
-                                       mn_offspring_sexual_PBS,                # mean of the sexual offspring distribution for PBS
-                                       disp_offspring_sexual_PBS,              # mean of the sexual offspring distribution for PBS
-                                       mn_offspring_sexual_genPop,             # mean of the sexual offspring distribution for genPop
-                                       disp_offspring_sexual_genPop,           # mean of the sexual offspring distribution for genPop
-                                       sexual_transmission_occupation_matrix,  # rows are the proportions of cases in each occupation a particular occupation gives rises to
+mpox_ring_vaccination_sim <- function(## Sexual Transmission Parameters
+                                      mn_offspring_sexual_SW,                 # mean of the sexual offspring distribution for SW
+                                      disp_offspring_sexual_SW,               # overdispersion of the sexual offspring distribution for SW
+                                      mn_offspring_sexual_PBS,                # mean of the sexual offspring distribution for PBS
+                                      disp_offspring_sexual_PBS,              # mean of the sexual offspring distribution for PBS
+                                      mn_offspring_sexual_genPop,             # mean of the sexual offspring distribution for genPop
+                                      disp_offspring_sexual_genPop,           # mean of the sexual offspring distribution for genPop
+                                      sexual_transmission_occupation_matrix,  # rows are the proportions of cases in each occupation a particular occupation gives rises to
 
-                                       ## Household Transmission Parameters
-                                       mn_offspring_hh,                        # mean of the household offspring distribution
-                                       disp_offspring_hh,                      # overdispersion of the household offspring distribution
+                                      ## Household Transmission Parameters
+                                      mn_offspring_hh,                        # mean of the household offspring distribution
+                                      disp_offspring_hh,                      # overdispersion of the household offspring distribution
 
-                                       ## Community Transmission Parameters
-                                       mn_offspring_community,                 # mean of the community offspring distribution
-                                       disp_offspring_community,               # overdispersion of the community offspring distribution
-                                       community_transmission_age_matrix,      # rows are the proportions of cases in each age-group a particular age-group gives rises to (note this needs to take into account smallpox vaccination)
+                                      ## Community Transmission Parameters
+                                      mn_offspring_community,                 # mean of the community offspring distribution
+                                      disp_offspring_community,               # overdispersion of the community offspring distribution
+                                      community_transmission_age_matrix,      # rows are the proportions of cases in each age-group a particular age-group gives rises to (note this needs to take into account smallpox vaccination)
 
-                                       ## Natural History Parameters
-                                       prop_asymptomatic,                      # probability an infection is asymptomatic
-                                       generation_time,                        # generation time distribution
-                                       infection_to_onset,                     # infection to symptom onset time distribution
+                                      ## Natural History Parameters
+                                      prop_asymptomatic,                      # probability an infection is asymptomatic
+                                      generation_time,                        # generation time distribution
+                                      infection_to_onset,                     # infection to symptom onset time distribution
 
-                                       ## Vaccine-Related Parameters
-                                       vaccine_start,                          # time at which the vaccine becomes available
-                                       vaccine_coverage,                       # probability that each eligible individual gets vaccinated
-                                       vaccine_efficacy_infection,             # vaccine efficacy against infection
-                                       vaccine_efficacy_transmission,          # reduction in transmissibility of breakthrough infections in vaccinated individuals
-                                       vaccine_logistical_delay,               # delay between symptom onset and vaccination of contacts (and contacts of contacts) occurring
-                                       vaccine_protection_delay,               # delay between vaccination and protection developing
+                                      ## Vaccine-Related Parameters
+                                      vaccine_start,                          # time at which the vaccine becomes available
+                                      vaccine_coverage,                       # probability that each eligible individual gets vaccinated
+                                      vaccine_efficacy_infection,             # vaccine efficacy against infection
+                                      vaccine_efficacy_transmission,          # reduction in transmissibility of breakthrough infections in vaccinated individuals
+                                      vaccine_logistical_delay,               # delay between symptom onset and vaccination of contacts (and contacts of contacts) occurring
+                                      vaccine_protection_delay,               # delay between vaccination and protection developing
 
-                                       ## Quarantine Related Parameters
-                                       prob_quarantine,                        # probability that an individual isolates
-                                       onset_to_quarantine,                    # symptom onset to quarantine time distribution
-                                       quarantine_efficacy_household,          # effectiveness of the quarantine at reducing onwards transmission for household infections
-                                       quarantine_efficacy_else,               # effectiveness of the quarantine at reducing onwards transmission for infections from other sources
+                                      ## Quarantine Related Parameters
+                                      prob_quarantine,                        # probability that an individual isolates
+                                      onset_to_quarantine,                    # symptom onset to quarantine time distribution
+                                      quarantine_efficacy_household,          # effectiveness of the quarantine at reducing onwards transmission for household infections
+                                      quarantine_efficacy_else,               # effectiveness of the quarantine at reducing onwards transmission for infections from other sources
 
-                                       ## Miscellaneous Parameters
-                                       synthetic_household_df,                 # dataframe of synthetic drc household, age and occupation population
-                                       t0 = 0,                                 # simulation starting time
-                                       population,                             # total population size
-                                       check_final_size,                       # maximum number of infections to simulate
-                                       initial_immune = 0,                     # initial number of individuals who are immune
-                                       seeding_cases,                          # number of seeding cases to start the epidemic with
-                                       seed                                    # stochastic seed
-                                       ) {
+                                      ## Miscellaneous Parameters
+                                      synthetic_household_df,                 # dataframe of synthetic drc household, age and occupation population
+                                      t0 = 0,                                 # simulation starting time
+                                      population,                             # total population size
+                                      check_final_size,                       # maximum number of infections to simulate
+                                      initial_immune = 0,                     # initial number of individuals who are immune
+                                      seeding_cases,                          # number of seeding cases to start the epidemic with
+                                      seed                                    # stochastic seed
+                                      ) {
 
   ## Setting the seed
   set.seed(seed)
@@ -202,12 +126,12 @@ basic_ring_vaccination_sim <- function(## Sexual Transmission Parameters
     hh_infected_index = I(vector("list", check_final_size)),          # id numbers of all individuals in the household who have been infected (note: this is dynamically updated)
     stringsAsFactors = FALSE)
 
-  # Sampling the households for the initial seeding cases - we seed this epidemic in sex workers
+  # Sampling the households for the initial seeding cases - we seed this epidemic in sex workers (i.e. all initial seeding cases are assumed to be SWs)
   sampled_rows <- synthetic_household_df[get("contains_SW") == 1][sample(.N, seeding_cases)]  # sampling from our synthetic DRC age/occ/hh dataframe households that contains a SW
-  seeding_case_indices <- unlist(lapply(sampled_rows$hh_occupations, function(occupations) {
-    which(occupations == "SW")  # Find the indices where "SW" occurs
+  seeding_case_indices <- unlist(lapply(sampled_rows$hh_occupations, function(occupations) {  # Find the household member id of the individual who is a SW
+    which(occupations == "SW")   # only ever 1 SW or in a household, so this works
   }))
-  seeding_case_occupations <- rep("SW", seeding_cases)  ## initial seeding cases are assumed to be SWs
+  seeding_case_occupations <- rep("SW", seeding_cases)
   seeding_case_ages <- rep("18+", seeding_cases)        ## all SWs are assumed to be 18+
 
   # Initialize the dataframe with the seeding cases
@@ -256,6 +180,40 @@ basic_ring_vaccination_sim <- function(## Sexual Transmission Parameters
   ##########################################################################################################################################
   # Generating secondary and tertiary infections from an index case, then pruning the resulting transmission tree via ring-vaccination
   ##########################################################################################################################################
+
+  ##########################################################################################################################################
+  # Generating secondary and tertiary infections from an index case, then pruning the resulting transmission tree via ring-vaccination
+
+  # The way this code is structured is as follows.
+  #
+  # For each "INDEX" infection, we use the offspring function to generate a series of
+
+
+  # We use the words INDEX, SECONDARY and TERTIARY to indicate how infections are related to each other. SECONDARY offspring refers to
+  # direct offspring of a particular INDEX infection. TERTIARY offspring are offspring of those SECONDARY offspring, i.e. they are
+  # indirect descendants of the INDEX infection, separated by a generation. We use these terms relationally i.e. the TERTIARY offspring
+  # of a particular INDEX infection will ALSO be the SECONDARY offspring of that INDEX infection's SECONDARY offspring.
+
+  # What follows is a series of decision points that depend on the timing of these infections, and properties of the INDEX infection:
+  #
+  #  - If the INDEX infection had previously been vaccinated and we are modelling an impact of vaccination in reducing transmissibility
+  #    in breakthrough infections of vaccinated individuals, we prune the offspring dataframe to reflect this reduced transmissibility.
+  #    This pruning does NOT depend on the timings of the SECONDARY offspring generated by the INDEX infection.
+  #
+  #  - If the INDEX infection is symptomatic (i.e. knows they're infected) and is quarantining, then we further prune the offspring
+  #    dataframe to reflect the infections averted by quarantining. We model different impacts of quarantining on household infections
+  #    vs those arising from other sources. This pruning DOES depend on the timings of the SECONDARY offspring generated by the
+  #    INDEX infection. Only infections that would otherwise be generated AFTER the infection quarantines have a chance to be averted.
+  #
+  #  - If the INDEX infection is symptomatic and the vaccine is available, then we implement a round of ring vaccination. During this
+  #    round of ring vaccination, and prune the transmission tree to reflect infections averted by ring vaccination. This pruning
+  #    DOES depend on the timings of the SECONDARY offspring generated by the INDEX infection. Only infections who would otherwise
+  #    be generated after they are both vaccinated and protected by vaccination have a chance to be averted.
+
+
+  # During each loop of the "while" loop below, we select an infection for whom we have not yet generated the full
+  ##########################################################################################################################################
+
   while ((any(is.na(tdf$n_offspring)) | any(tdf$n_offspring_post_pruning != 0 & tdf$secondary_offspring_generated == FALSE)) & nrow(tdf) <= check_final_size) {
 
     ## Get the total number of infections in the dataframe currently (so we can figure out how to label the new infections)
@@ -263,23 +221,20 @@ basic_ring_vaccination_sim <- function(## Sexual Transmission Parameters
     current_max_id <- tdf$id[current_max_row]
     current_max_hh_id <- max(tdf$hh_id)
 
-    ## Getting the timings of the earliest/oldest infection we haven't yet generated tertiary infections for
+    ## Getting the timings of the earliest/oldest infection we haven't yet generated tertiary infections for - this is the "INDEX INFECTION"
     index_time_infection <- min(tdf$time_infection_absolute[tdf$tertiary_offspring_generated == 0 &
-                                                              !is.na(tdf$time_infection_absolute)])                  # timing of the earliest unsimulated infection
-    index_idx <- which(tdf$time_infection_absolute == index_time_infection & !tdf$tertiary_offspring_generated)[1]   # get the row of the earliest unsimulated infection
-    index_id <- tdf$id[index_idx]                                                                                    # id of the earliest unsimulated infection
-    # if(index_id == 68) {
-    #   stop("error throwing time")
-    # }
-    index_t <- tdf$time_infection_absolute[index_idx]                                                                # infection time of the earliest unsimulated infection
-    index_gen <- tdf$generation[index_idx]                                                                           # generation of the earliest unsimulated infection
-    index_vaccinated <- tdf$vaccinated[index_idx]                                                                    # whether or not the index case (the "parent") is vaccinated
-    index_time_vaccinated <- tdf$time_vaccinated[index_idx]                                                          # when the index case (the "parent") was vaccinated
-    index_time_protected <- tdf$time_protected[index_idx]                                                            # when the index case (the "parent") was protected
-    index_onset_time <- infection_to_onset(n = 1)                                                                    # generate the time from infection to symptom onset for the index case
-    index_asymptomatic <- tdf$asymptomatic[index_idx]                                                                # whether or not the index case (the "parent") is asymptomatic (influences whether contacts get ring vaccinated or not)
+                                                              !is.na(tdf$time_infection_absolute)])                  # timing of the earliest unsimulated infection ("index" infection)
+    index_idx <- which(tdf$time_infection_absolute == index_time_infection & !tdf$tertiary_offspring_generated)[1]   # get the row of the earliest unsimulated infection ("index" infection)
+    index_id <- tdf$id[index_idx]                                                                                    # id of the earliest unsimulated infection ("index" infection)
+    index_t <- tdf$time_infection_absolute[index_idx]                                                                # infection time of the earliest unsimulated infection ("index" infection)
+    index_gen <- tdf$generation[index_idx]                                                                           # generation of the earliest unsimulated infection ("index" infection)
+    index_vaccinated <- tdf$vaccinated[index_idx]                                                                    # whether or not the index infection (the "parent") is vaccinated
+    index_time_vaccinated <- tdf$time_vaccinated[index_idx]                                                          # when the index infection (the "parent") was vaccinated
+    index_time_protected <- tdf$time_protected[index_idx]                                                            # when the index infection (the "parent") was protected
+    index_onset_time <- infection_to_onset(n = 1)                                                                    # generate the time from infection to symptom onset for the index infection (this is the time relative to index's parent infection)
+    index_asymptomatic <- tdf$asymptomatic[index_idx]                                                                # whether or not the index infection (the "parent") is asymptomatic (influences whether contacts get ring vaccinated or not)
     index_secondary_offspring_generated <- tdf$secondary_offspring_generated[index_idx]                              # whether or not secondary offspring have already been generated for this infection
-    index_quarantine <- rbinom(n = 1, size = 1, prob = prob_quarantine)                                              # whether or not the index case isolates
+    index_quarantine <- rbinom(n = 1, size = 1, prob = prob_quarantine)                                              # whether or not the index infection isolates
     index_quarantine_time <- ifelse(index_quarantine == 1, onset_to_quarantine(n = 1), NA)                           # if the infection isolates, how soon after symptom onset they do so
     index_occupation <- tdf$occupation[index_idx]                                                                    # occupation of the index infection (SW, PBS or genPop)
     index_age_group <- tdf$age[index_idx]                                                                            # age-group of the index infection (0-5, 5-18 or 18+)
@@ -292,23 +247,24 @@ basic_ring_vaccination_sim <- function(## Sexual Transmission Parameters
     index_hh_infected_index <- unlist(tdf$hh_infected_index[index_idx])                                              # house member IDs of all infected household members
 
     ## Adding the onset times and quarantine times to this infection's information in the dataframe
-    tdf$time_onset_relative_parent[index_idx] <- index_onset_time
-    index_onset_time_absolute <- index_onset_time + index_time_infection
-    tdf$time_onset_absolute[index_idx] <- index_onset_time_absolute
-    tdf$quarantined[index_idx] <- index_quarantine
-    tdf$time_quarantined_relative_time_onset[index_idx] <- index_quarantine_time
-    tdf$time_quarantined_relative_time_infection[index_idx] <- index_onset_time + index_quarantine_time
-    tdf$time_quarantined_absolute[index_idx] <- index_time_infection + index_onset_time + index_quarantine_time
+    tdf$time_onset_relative_parent[index_idx] <- index_onset_time                                                    # adding index onset time (relative to index's parent)to the storage dataframe
+    index_onset_time_absolute <- index_onset_time + index_time_infection                                             # converting index_onset_time (symptom onset time relative to index's parent) into absolute calendar time
+    tdf$time_onset_absolute[index_idx] <- index_onset_time_absolute                                                  # adding index onset time (absolute calendar time) to the storage dataframe
+    tdf$quarantined[index_idx] <- index_quarantine                                                                   # adding quarantine indicator to storage dataframe
+    tdf$time_quarantined_relative_time_onset[index_idx] <- index_quarantine_time                                     # adding quarantine time relative to index's symptom onset to the storage dataframe
+    tdf$time_quarantined_relative_time_infection[index_idx] <- index_onset_time + index_quarantine_time              # adding quarantine time relative to index's infection to the storage dataframe
+    tdf$time_quarantined_absolute[index_idx] <- index_time_infection + index_onset_time + index_quarantine_time      # adding quarantine time in absolute calendar time to the storage dataframe
 
     ## Calculating time to vaccinate the contacts of this index infection
-    time_to_contact_vaccination <- index_onset_time + vaccine_logistical_delay                         ## Time between index case infected and contacts being ring vaccinated
-    time_to_contact_vaccination_protection <- time_to_contact_vaccination + vaccine_protection_delay   ## Time between index case infected and contacts being protected by the vaccination
+    time_to_contact_vaccination <- index_onset_time + vaccine_logistical_delay                                       # time between index case infected and contacts being ring vaccinated
+    time_to_contact_vaccination_protection <- time_to_contact_vaccination + vaccine_protection_delay                 # time between index case infected and contacts being protected by the vaccination
 
     ##########################################################################################################################
     # Generating secondary infections from the index infection
     # - Note: If we've already generated the secondary offspring for this index infection (when they were a secondary
-    #         infection to a preceding index infection), we only generate tertiary offspring for this index infection
-    #         and skip the step directly below.
+    #         infection to a preceding index infection), we skip the step directly below (which is about generating
+    #         secondary offspring) and instead see whether any of the previously generated secondary offspring
+    #         are prevented by the second chance at ring vaccination offered by having two rings of ring-vaccination.
     ##########################################################################################################################
 
     ############################################################################################
