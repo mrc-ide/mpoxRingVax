@@ -34,12 +34,12 @@ implement_quarantine <- function(symptom_onset_time,            # time after inf
 
   if ("household" %in% offspring_quarantine_averted_transmission_route) {
 
-    ## Removing the averted household infections from the cumulative total
+    ## Removing the averted household infections from the cumulative total household infections tracker for other household members
     offspring_num_household_infections_averted <- sum(offspring_quarantine_averted_transmission_route == "household")
     offspring_function_draw$new_hh_cumulative_infections <- offspring_function_draw$new_hh_cumulative_infections - offspring_num_household_infections_averted
     offspring_function_draw$offspring_characteristics$hh_infections[offspring_function_draw$offspring_characteristics$transmission_route == "household"] <- offspring_function_draw$new_hh_cumulative_infections
 
-    ## Modifying the list of all ids of infected household members to account for the averted infections
+    ## Modifying the list of all ids of infected household members to account for the averted infections (i.e. remove the averted infections from that list)
     offspring_quarantine_averted_household_member_id <- offspring_quarantine_averted_hh_member_index[which(offspring_quarantine_averted_transmission_route == "household")]
     offspring_quarantine_averted_household_member_index_for_removal <- which(unlist(offspring_function_draw$new_hh_infected_index) %in% offspring_quarantine_averted_household_member_id)
     offspring_function_draw$new_hh_infected_index <- list(unlist(offspring_function_draw$new_hh_infected_index)[-offspring_quarantine_averted_household_member_index_for_removal])
@@ -49,7 +49,7 @@ implement_quarantine <- function(symptom_onset_time,            # time after inf
 
   # Updating index_n_offspring and secondary_infection_times in light of new removals due to quarantining
   n_offspring <- sum(offspring_quarantine_retained)                                                       # accounting for infections averted by quarantine from index_n_offspring
-  infection_times <- infection_times[offspring_quarantine_retained_index]                                 # removing infections averted by quarantine from secondary_infection_times
+  infection_times <- offspring_infection_times[offspring_quarantine_retained_index]                       # removing infections averted by quarantine from secondary_infection_times
 
   ## Returning the number of offspring, offspring infection times and characteristics after removing infections averted by quarantining
   return(list(updated_n_offspring = n_offspring,

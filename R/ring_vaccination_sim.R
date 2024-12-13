@@ -324,63 +324,30 @@ mpox_ring_vaccination_sim <- function(## Sexual Transmission Parameters
                                                      community_transmission_age_matrix = community_transmission_age_matrix)
 
       index_n_offspring <- index_offspring_function_draw$total_offspring
+      secondary_infection_times <- generation_time(index_n_offspring)
       tdf$n_offspring[index_idx] <- index_n_offspring
       tdf$secondary_offspring_generated[index_idx] <- TRUE
 
       ####################################################################################################################################
       # Secondary Step 2: Removing secondary infections after taking vaccination's effect on transmission in breakthrough infections into account
       ####################################################################################################################################
-      ## Only flow through this step if index infection was vaccinated and still infected (i.e. a breakthrough infection) and there are offspring to potentially avert
-      if (index_vaccinated == 1 & index_n_offspring != 0) {
+      ## Flow through this step if index infection was vaccinated and still infected (i.e. a breakthrough infection) AND if index's vaccination protection developed
+      ## BEFORE they were infected (otherwise there wouldn't be any effect of vaccination)
+      if (index_vaccinated == 1 & (index_time_protected < index_time_infection) & index_n_offspring != 0) {
 
-        ## Only do this step if the index's vaccination protection developed BEFORE they were infected (otherwise they wouldn't have any effect of vaccination)
-        if (index_time_protected < index_time_infection) {
+        # Prune offspring based on reduced transmissibility of vaccinated breakthrough infections
+        index_vax_reduced_trans_outcome <- implement_breakthrough_reduced_transmissibility(n_offspring = index_n_offspring,
+                                                                                           offspring_infection_times = secondary_infection_times,
+                                                                                           vaccine_efficacy_transmission = vaccine_efficacy_transmission,
+                                                                                           offspring_function_draw = index_offspring_function_draw)
 
-          ## Binomial draw to decide which infections are averted by the reduced transmissibility of the breakthrough infection
-          index_offspring_vaccine_retained <- rbinom(n = index_n_offspring, size = 1, prob = 1 - vaccine_efficacy_transmission)
+        # Updating number offspring, their infection times and characteristics to reflect removals due to reduced transmissibility of vaccinated breakthrough infections
+        index_n_offspring <- index_vax_reduced_trans_outcome$updated_n_offspring
+        secondary_infection_times <- index_vax_reduced_trans_outcome$updated_infection_times
+        index_offspring_function_draw <- index_vax_reduced_trans_outcome$updated_offspring_function_draw
 
-          ## Subsetting index_offspring_function_draw to get the infections that don't occur because of the reduced transmissibility of breakthrough infections
-          index_offspring_vaccine_averted_index <- which(index_offspring_vaccine_retained == 0)
-          index_offspring_vaccine_averted_transmission_route <- index_offspring_function_draw$offspring_characteristics$transmission_route[index_offspring_vaccine_averted_index] # getting the transmisssion route of each of the averted infections
-          index_offspring_vaccine_averted_hh_member_index <- index_offspring_function_draw$offspring_characteristics$hh_member_index[index_offspring_vaccine_averted_index]       # getting the hh member ids of each of the averted infections
-
-          ## Subsetting index_offspring_function_draw to reflect the averted infections because of reduced transmissibility of the breakthrough infection
-          index_offspring_vaccine_retained_index <- which(index_offspring_vaccine_retained == 1)
-
-          ## Updating the offspring function draw index_offspring_function_draw to reflect loss of averted infections
-          index_offspring_function_draw$offspring_characteristics <- index_offspring_function_draw$offspring_characteristics[index_offspring_vaccine_retained_index, ]    # subsetting the offspring dataframe to only retain the infections that weren't averted
-          index_offspring_function_draw$total_offspring <- length(index_offspring_vaccine_retained_index)                                                                 # updating total number of offspring to reflect loss of averted infections
-          index_offspring_function_draw$num_offspring_sexual <- sum(index_offspring_function_draw$offspring_characteristics$transmission_route == "sexual")       # updating number of sexual infections to reflect loss of averted infections
-          index_offspring_function_draw$num_offspring_hh <- sum(index_offspring_function_draw$offspring_characteristics$transmission_route == "household")        # updating number of household infections to reflect loss of averted infections
-          index_offspring_function_draw$num_offspring_community <- sum(index_offspring_function_draw$offspring_characteristics$transmission_route == "community") # updating number of community infections to reflect loss averted infections
-
-          ## If any of the averted infections are household infections, we ALSO need to update the information of any infections who share their household
-          ## - Specifically, we need to update the cumulative household infections tracker and the index tracking which household members have been infected
-          ##   and remove the averted infections from both of these
-          ## - Note that because of the way the offspring function is set up, the "household" infections must all belong to the same household,
-          ##   which is the same household as the index infection
-          if ("household" %in% index_offspring_vaccine_averted_transmission_route) { # are any of the averted infections ones who got infected in a household?
-
-            ## Removing the averted household infections from the cumulative total
-            index_offspring_num_household_infections_averted <- sum(index_offspring_vaccine_averted_transmission_route == "household")
-            index_offspring_function_draw$new_hh_cumulative_infections <- index_offspring_function_draw$new_hh_cumulative_infections - index_offspring_num_household_infections_averted
-            index_offspring_function_draw$offspring_characteristics$hh_infections[index_offspring_function_draw$offspring_characteristics$transmission_route == "household"] <- index_offspring_function_draw$new_hh_cumulative_infections
-
-            ## Modifying the list of all ids of infected household members to account for the averted infections
-            index_offspring_vaccine_averted_household_member_id <- index_offspring_vaccine_averted_hh_member_index[which(index_offspring_vaccine_averted_transmission_route == "household")]
-            index_offspring_vaccine_averted_household_member_index_for_removal <- which(unlist(index_offspring_function_draw$new_hh_infected_index) %in% index_offspring_vaccine_averted_household_member_id)
-            index_offspring_function_draw$new_hh_infected_index <- list(unlist(index_offspring_function_draw$new_hh_infected_index)[-index_offspring_vaccine_averted_household_member_index_for_removal])
-            index_offspring_function_draw$offspring_characteristics$hh_infected_index[index_offspring_function_draw$offspring_characteristics$transmission_route == "household"] <- I(index_offspring_function_draw$new_hh_infected_index)
-
-          }
-
-          ## New total number of offspring produced as a result of  reduced transmissibility of the breakthrough infection
-          index_n_offspring <- length(index_offspring_vaccine_retained_index)
-
-        }
       }
       tdf$n_offspring_new[index_idx] <- index_n_offspring
-      secondary_infection_times <- generation_time(index_n_offspring)
 
       ################################################################################################################################################################
       ## Secondary Step 3: Removing any infections that are averted due to quarantining (assumed to occur index_quarantine_time after symptom onset, which is index_onset_time)
@@ -839,64 +806,32 @@ mpox_ring_vaccination_sim <- function(## Sexual Transmission Parameters
                                                            number_susceptible_community = susc,
                                                            population_community = population,
                                                            community_transmission_age_matrix = community_transmission_age_matrix)
+
         secondary_n_offspring <- secondary_offspring_function_draw$total_offspring
+        tertiary_infection_times <- generation_time(secondary_n_offspring)
         tdf$n_offspring[secondary_idx] <- secondary_n_offspring
         tdf$secondary_offspring_generated[secondary_idx] <- TRUE
 
         ##########################################################################################################################################
         # Tertiary Step 2: Removing tertiary infections after taking vaccination's effect on transmission in breakthrough infections into account
         ##########################################################################################################################################
-        ## Only flow through this step if secondary infection was vaccinated and still infected (i.e. a breakthrough infection)
-        if (secondary_vaccinated == 1) {
+        ## Flow through this step if secondary infection was vaccinated and still infected (i.e. a breakthrough infection) AND if seconndary's vaccination protection developed
+        ## BEFORE they were infected (otherwise there wouldn't be any effect of vaccination)
+        if (secondary_vaccinated == 1 & (secondary_time_protected < secondary_time_infection) & secondary_n_offspring != 0) {
 
-          ## Only do this step if the secondary's vaccination protection developed BEFORE they were infected (otherwise they wouldn't have any effect of vaccination)
-          if (secondary_time_protected < secondary_time_infection) {
+          # Prune offspring based on reduced transmissibility of vaccinated breakthrough infections
+          secondary_vax_reduced_trans_outcome <- implement_breakthrough_reduced_transmissibility(n_offspring = secondary_n_offspring,
+                                                                                                 offspring_infection_times = tertiary_infection_times,
+                                                                                                 vaccine_efficacy_transmission = vaccine_efficacy_transmission,
+                                                                                                 offspring_function_draw = secondary_offspring_function_draw)
 
-            ## Binomial draw to decide which infections are averted by the reduced transmissibility of the breakthrough infection
-            secondary_offspring_vaccine_retained <- rbinom(n = secondary_n_offspring, size = 1, prob = 1 - vaccine_efficacy_transmission)
+          # Updating number offspring, their infection times and characteristics to reflect removals due to reduced transmissibility of vaccinated breakthrough infections
+          secondary_n_offspring <- secondary_vax_reduced_trans_outcome$updated_n_offspring
+          tertiary_infection_times <- secondary_vax_reduced_trans_outcome$updated_infection_times
+          secondary_offspring_function_draw <- secondary_vax_reduced_trans_outcome$updated_offspring_function_draw
 
-            ## Subsetting secondary_offspring_function_draw to get the infections that don't occur because of the reduced transmissibility of breakthrough infections
-            secondary_offspring_vaccine_averted_index <- which(secondary_offspring_vaccine_retained == 0)
-            secondary_offspring_vaccine_averted_transmission_route <- secondary_offspring_function_draw$offspring_characteristics$transmission_route[secondary_offspring_vaccine_averted_index] # getting the transmisssion route of each of the averted infections
-            secondary_offspring_vaccine_averted_hh_member_index <- secondary_offspring_function_draw$offspring_characteristics$hh_member_index[secondary_offspring_vaccine_averted_index]       # getting the hh member ids of each of the averted infections
-
-            ## Subsetting secondary_offspring_function_draw to reflect the averted infections because of reduced transmissibility of the breakthrough infection
-            secondary_offspring_vaccine_retained_index <- which(secondary_offspring_vaccine_retained == 1)
-
-            ## Updating the offspring function draw index_offspring_function_draw to reflect loss of averted infections
-            secondary_offspring_function_draw$offspring_characteristics <- secondary_offspring_function_draw$offspring_characteristics[secondary_offspring_vaccine_retained_index, ]    # subsetting the offspring dataframe to only retain the infections that weren't averted
-            secondary_offspring_function_draw$total_offspring <- length(secondary_offspring_vaccine_retained_index)                                                                     # updating total number of offspring to reflect loss of averted infections
-            secondary_offspring_function_draw$num_offspring_sexual <- sum(secondary_offspring_function_draw$offspring_characteristics$transmission_route == "sexual")           # updating number of sexual infections to reflect loss of averted infections
-            secondary_offspring_function_draw$num_offspring_hh <- sum(secondary_offspring_function_draw$offspring_characteristics$transmission_route == "household")            # updating number of household infections to reflect loss of averted infections
-            secondary_offspring_function_draw$num_offspring_community <- sum(secondary_offspring_function_draw$offspring_characteristics$transmission_route == "community")     # updating number of community infections to reflect loss averted infections
-
-            ## If any of the averted infections are household infections, we ALSO need to update the information of any infections who share their household
-            ## - Specifically, we need to update the cumulative household infections tracker and the index tracking which household members have been infected
-            ##   and remove the averted infections from both of these
-            ## - Note that because of the way the offspring function is set up, the "household" infections must all belong to the same household,
-            ##   which is the same household as the secondary infection
-            if ("household" %in% secondary_offspring_vaccine_averted_transmission_route) {
-
-              ## Removing the averted household infections from the cumulative total
-              secondary_offspring_num_household_infections_averted <- sum(secondary_offspring_vaccine_averted_transmission_route == "household")
-              secondary_offspring_function_draw$new_hh_cumulative_infections <- secondary_offspring_function_draw$new_hh_cumulative_infections - secondary_offspring_num_household_infections_averted
-              secondary_offspring_function_draw$offspring_characteristics$hh_infections[secondary_offspring_function_draw$offspring_characteristics$transmission_route == "household"] <- secondary_offspring_function_draw$new_hh_cumulative_infections
-
-              ## Modifying the list of all ids of infected household members to account for the averted infections
-              secondary_offspring_vaccine_averted_household_member_id <- secondary_offspring_vaccine_averted_hh_member_index[which(secondary_offspring_vaccine_averted_transmission_route == "household")]
-              secondary_offspring_vaccine_averted_household_member_index_for_removal <- which(unlist(secondary_offspring_function_draw$new_hh_infected_index) %in% secondary_offspring_vaccine_averted_household_member_id)
-              secondary_offspring_function_draw$new_hh_infected_index <- list(unlist(secondary_offspring_function_draw$new_hh_infected_index)[-secondary_offspring_vaccine_averted_household_member_index_for_removal])
-              secondary_offspring_function_draw$offspring_characteristics$hh_infected_index[secondary_offspring_function_draw$offspring_characteristics$transmission_route == "household"] <- I(secondary_offspring_function_draw$new_hh_infected_index)
-
-            }
-
-            ## New total number of offspring produced as a result of  reduced transmissibility of the breakthrough infection
-            secondary_n_offspring <- length(secondary_offspring_vaccine_retained_index)
-
-          }
         }
         tdf$n_offspring_new[secondary_idx] <- secondary_n_offspring
-        tertiary_infection_times <- generation_time(secondary_n_offspring)
 
         #################################################################################################################################################################################
         ## Tertiary Step 3: Removing any infections that are averted due to quarantining (assumed to occur secondary_time_quarantine after symptom onset, which is secondary_onset_time)
