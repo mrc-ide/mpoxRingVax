@@ -41,7 +41,7 @@ quarantine_efficacy_else <- 0.6
 vaccine_start <- 0
 prop_asymptomatic <- 0.1
 
-x <- basic_ring_vaccination_sim(mn_offspring_sexual_SW = mn_offspring_sexual_SW,
+x <- mpox_ring_vaccination_sim(mn_offspring_sexual_SW = mn_offspring_sexual_SW,
                                 disp_offspring_sexual_SW = disp_offspring_sexual_SW,
                                 mn_offspring_sexual_PBS = mn_offspring_sexual_PBS,
                                 disp_offspring_sexual_PBS = disp_offspring_sexual_PBS,

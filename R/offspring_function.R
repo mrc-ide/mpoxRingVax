@@ -241,11 +241,8 @@ offspring_fun <- function(synthetic_household_df,                    # dataframe
   ##########################################################################################################################################
 
   return(list(total_offspring = num_offspring_sexual + num_offspring_hh + num_offspring_community,
-              num_offspring_sexual = num_offspring_sexual,
-              num_offspring_hh = num_offspring_hh,
               new_hh_infected_index = list(cumulative_hh_infected_index),  ## make sure to use this to update the number of infections left in the household for the index infection!!!!
               new_hh_cumulative_infections = index_hh_prior_infections + num_offspring_hh,
-              num_offspring_community = num_offspring_community,
               offspring_characteristics = rbind(offspring_characteristics_df_sexual, offspring_characteristics_df_hh, offspring_characteristics_df_community)))
 }
 
