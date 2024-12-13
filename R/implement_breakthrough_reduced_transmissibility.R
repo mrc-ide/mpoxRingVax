@@ -35,9 +35,9 @@ implement_breakthrough_reduced_transmissibility <- function(n_offspring,        
 
   }
 
-  # Updating index_n_offspring and secondary_infection_times in light of new removals due to quarantining
-  n_offspring <- sum(offspring_vaccine_retained)                                                    # accounting for infections averted by quarantine from index_n_offspring
-  infection_times <- offspring_infection_times[offspring_vaccine_retained_index]                    # removing infections averted by quarantine from secondary_infection_times
+  # Updating index_n_offspring and secondary_infection_times in light of new removals due to reduced transmissibility of breakthrough infections
+  n_offspring <- sum(offspring_vaccine_retained)                                                    # accounting for infections averted by reduced transmissibility of breakthrough vaccinated infections
+  infection_times <- offspring_infection_times[offspring_vaccine_retained_index]                    # removing infections averted by reduced transmissibility of breakthrough vaccinated infections
 
   return(list(updated_n_offspring = n_offspring,
               updated_infection_times = infection_times,
