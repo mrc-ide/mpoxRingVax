@@ -81,6 +81,3 @@ implement_ring_vaccination <- function(n_offspring,                            #
 
 }
 
-
-
-
